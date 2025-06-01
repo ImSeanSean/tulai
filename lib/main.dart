@@ -3,13 +3,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tulai/screens/home_page.dart';
 import 'package:tulai/screens/landing_page.dart';
 import 'package:tulai/screens/student/enrollment_page.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 Future<void> main() async {
   //Initialize Supabase
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   await Supabase.initialize(
-    url: 'YOUR_SUPABASE_URL',
-    anonKey: 'YOUR_SUPABASE_ANON_KEY',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
   runApp(const MyApp());
 }

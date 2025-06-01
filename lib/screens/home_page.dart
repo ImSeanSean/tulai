@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tulai/screens/teacher/enrollees.dart';
 import 'package:tulai/screens/teacher/settings.dart';
 
 class HomePage extends StatefulWidget {
@@ -13,10 +14,6 @@ class _HomePageState extends State<HomePage> {
 
   final List<NavigationDestination> destinations = const [
     NavigationDestination(
-      icon: Icon(Icons.app_registration),
-      label: 'Enrollment',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.people),
       label: 'Enrollees',
     ),
@@ -29,10 +26,10 @@ class _HomePageState extends State<HomePage> {
   Widget _getBody() {
     switch (selectedIndex) {
       case 0:
-        return const Center(child: Text('Enrollment Page'));
+        return Enrollees(
+          key: UniqueKey(),
+        );
       case 1:
-        return const Center(child: Text('Enrollees Page'));
-      case 2:
         return TeacherSettings(
           key: UniqueKey(),
         );
