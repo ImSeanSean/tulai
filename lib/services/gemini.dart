@@ -7,7 +7,17 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 final model = GenerativeModel(
     model: "gemma-3-12b-it", apiKey: dotenv.env['GEMINI_API_KEY']!);
 
-Future<List<String>> handleNameField(String question, String userAnswer) async {
+class NameFieldResult {
+  final List<String>? suggestions;
+  final String? error;
+
+  NameFieldResult({this.suggestions, this.error});
+
+  bool get hasError => error != null;
+}
+
+Future<NameFieldResult> handleNameField(
+    String question, String userAnswer) async {
   const instruction = '''
 You are processing a name field in a speech-to-text enrollment form. Your task:
 
@@ -19,11 +29,6 @@ You are processing a name field in a speech-to-text enrollment form. Your task:
 
 4. If the response appears unrelated (address, date, school name), return an error JSON:
 {"error": {"message": "That seems like a [type], but we’re asking for a name."}}
-
-Examples of unrelated responses:
-- Contains "Barangay", "City", "Province" → address
-- Mentions months, years, or days → birthdate
-- Ends with "High School", "University", or "College" → school name
 ''';
 
   final expectedComponent = () {
@@ -62,18 +67,20 @@ Transcribed user answer: "$userAnswer"
 
   try {
     final dynamic jsonResponse = jsonDecode(rawText!);
+
     if (jsonResponse is List) {
-      return (jsonResponse).cast<String>();
+      return NameFieldResult(suggestions: jsonResponse.cast<String>());
     } else if (jsonResponse is Map && jsonResponse.containsKey("error")) {
-      print("Model returned an error: ${jsonResponse["error"]}");
-      return [];
+      final errorMessage = jsonResponse["error"]["message"] ?? "Unknown error";
+      print("Model returned an error: $errorMessage");
+      return NameFieldResult(error: errorMessage);
     } else {
       print("Unexpected JSON response format: $rawText");
-      return [];
+      return NameFieldResult(error: "Unexpected response format.");
     }
   } catch (e) {
     print("Failed to parse response: $rawText");
-    return [];
+    return NameFieldResult(error: "Failed to process model response.");
   }
 }
 

@@ -33,6 +33,7 @@ class Student {
   final String? lastGradeLevelCompleted;
   final String? reasonForIncompleteSchooling;
   final bool? hasAttendedALS;
+  final DateTime? created_at;
 
   Student({
     this.id,
@@ -65,6 +66,7 @@ class Student {
     this.lastGradeLevelCompleted,
     this.reasonForIncompleteSchooling,
     this.hasAttendedALS,
+    this.created_at,
   });
 
   Map<String, dynamic> toMap() {
@@ -134,6 +136,7 @@ class Student {
       lastGradeLevelCompleted: map['last_grade_level_completed'],
       reasonForIncompleteSchooling: map['reason_for_incomplete_schooling'],
       hasAttendedALS: map['has_attended_als'],
+      created_at: DateTime.parse(map['created_at']),
     );
   }
 }

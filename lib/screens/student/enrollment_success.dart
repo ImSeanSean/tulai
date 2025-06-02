@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tulai/widgets/appbar.dart';
 
 class EnrollmentSuccess extends StatelessWidget {
   const EnrollmentSuccess({super.key});
@@ -6,32 +7,7 @@ class EnrollmentSuccess extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: Padding(
-          padding: const EdgeInsets.all(1.0),
-          child: Image.asset(
-            'assets/images/deped-logo.png',
-            fit: BoxFit.contain,
-          ),
-        ),
-        title: Text(
-          'ALS Enrollment System',
-          style: TextStyle(
-            color: Theme.of(context).splashColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Image.asset(
-              'assets/images/als-logo.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-        ],
-      ),
+      appBar: const CustomAppBar(),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Center(
