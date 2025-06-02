@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_print
 
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:tulai/core/app_config.dart';
 import 'package:tulai/core/constants.dart';
@@ -22,9 +23,10 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
   // Speech to Text
   final SpeechToText _speechToText = SpeechToText();
   bool _speechEnabled = false;
+  String _errorText = "";
   String _wordsSpoken = "";
-  String? _errorText;
   double _confidenceLevel = 0;
+  String _lastProcessed = "";
   List<String> suggestions = [];
 
   late final List<String> allQuestions;
@@ -37,13 +39,6 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
   void initState() {
     super.initState();
     initSpeech();
-
-    _speechToText.statusListener = (status) {
-      print("[DEBUG] Speech status: $status");
-      if (status == "done" || status == "notListening") {
-        setState(() {});
-      }
-    };
 
     if (AppConfig().formLanguage == FormLanguage.filipino) {
       allQuestions = [
@@ -127,72 +122,65 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
     });
   }
 
-  void _onSpeechResult(result) async {
-    final spokenWords = result.recognizedWords;
-    final confidence = result.confidence;
-    final currentQuestion = allQuestions[_currentQuestionIndex];
+  void _onSpeechResult(SpeechRecognitionResult result) async {
+    // Only process final results
+    if (!result.finalResult) return;
 
-    final currentField = currentQuestion;
+    final newTranscript = result.recognizedWords.trim();
+
+    // Prevent re-processing the same recognized words
+    if (newTranscript == _lastProcessed) return;
+    _lastProcessed = newTranscript;
+
+    setState(() {
+      _wordsSpoken = newTranscript;
+      _confidenceLevel = result.confidence;
+
+      final currentQuestion = allQuestions[_currentQuestionIndex];
+      _answerController.text = _wordsSpoken
+          .toLowerCase()
+          .split(' ')
+          .map((word) =>
+              word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
+          .join(' ');
+      answers[currentQuestion] = _wordsSpoken;
+    });
+
+    final currentField = allQuestions[_currentQuestionIndex];
     List<String> newSuggestions = [];
-    String? errorMessage;
 
-    // Determine which handler to use
+    print("🔊 Words Spoken: '$_wordsSpoken'");
+    print("📝 Current Field: '$currentField'");
+
     if (formQuestionsName.contains(currentField) ||
         formQuestionsFatherGuardian.contains(currentField) ||
         formQuestionsMotherGuardian.contains(currentField)) {
-      final result = await handleNameField(currentField, spokenWords);
-      if (result.hasError) {
-        setState(() {
-          _errorText = result.error!;
-          _answerController.text = '';
-          answers.remove(currentQuestion);
-          suggestions = [];
-        });
-        return;
-      } else {
-        newSuggestions = result.suggestions ?? [];
-      }
+      print("🔍 Using name field handler");
+      newSuggestions = await handleNameField(currentField, _wordsSpoken);
     } else if (formQuestionsAddress.contains(currentField)) {
-      newSuggestions = await handleAddressField(currentField, spokenWords);
+      print("🔍 Using address field handler");
+      newSuggestions = await handleAddressField(currentField, _wordsSpoken);
     } else if (formQuestionsOthers.contains(currentField)) {
-      newSuggestions = await handleOtherField(currentField, spokenWords);
+      print("🔍 Using other field handler");
+      newSuggestions = await handleOtherField(currentField, _wordsSpoken);
     } else if (formQuestionsEducationalInfo.contains(currentField)) {
+      print("🔍 Using educational field handler");
       newSuggestions =
-          await handleEducationalInformationField(currentField, spokenWords);
+          await handleEducationalInformationField(currentField, _wordsSpoken);
+    } else {
+      print("❓ No handler matched for field: '$currentField'");
     }
 
-    // Check if suggestions contain an error
-    if (newSuggestions.isEmpty) {
-      // Display error message in the UI
-      errorMessage = "The spoken input does not seem valid for this question.";
-      print("Error: $errorMessage");
-
-      setState(() {
-        _wordsSpoken = spokenWords;
-        _confidenceLevel = confidence;
-        suggestions = [];
-        _answerController.text = '';
-        answers.remove(
-            currentQuestion); // Remove any previously saved invalid answer
-        _errorText =
-            errorMessage!; // <-- Set this in your UI as a visible message
-      });
-      return; // Stop here — don't update the answer
-    }
-
-    // If valid suggestions exist, update answer normally
     setState(() {
-      _wordsSpoken = spokenWords;
-      _confidenceLevel = confidence;
       suggestions = newSuggestions;
-      _answerController.text =
-          newSuggestions.first; // Show the first suggestion
-      answers[currentQuestion] = newSuggestions.first;
-      _errorText = "";
     });
 
-    print("Suggested answers: $suggestions");
-    print("Confidence Level: $_confidenceLevel");
+    if (suggestions.isEmpty) {
+      _errorText = "Your response is not valid. Please try again.";
+    }
+
+    print("✅ Suggested answers: $suggestions");
+    print("📊 Confidence Level: $_confidenceLevel");
   }
 
   void _previousQuestion() {
@@ -311,20 +299,21 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                   child: Column(
                     children: [
                       Align(
-                          alignment: Alignment.centerLeft,
-                          child: IconButton(
-                            icon: const Icon(Icons.arrow_back),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                          )),
+                        alignment: Alignment.centerLeft,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                          child: const Icon(Icons.arrow_back),
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       Center(
                         child: Text(
                           currentQuestion,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 25,
+                            fontSize: 22,
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).primaryColor,
                           ),
@@ -345,57 +334,54 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: _errorText != null && _errorText!.isNotEmpty
+                          children: suggestions.isNotEmpty
                               ? [
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8),
+                                  const Padding(
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 8),
                                     child: Text(
-                                      _errorText!,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.red,
-                                        fontWeight: FontWeight.bold,
+                                      'Suggestions:',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  ...suggestions.map(
+                                    (s) => Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4),
+                                      child: ActionChip(
+                                        label: Text(s),
+                                        onPressed: () {
+                                          print('Selected suggestion: $s');
+                                          _answerController.text = s;
+                                          answers[currentQuestion] = s;
+                                        },
                                       ),
                                     ),
                                   ),
                                 ]
-                              : suggestions.isNotEmpty
-                                  ? [
-                                      const Padding(
-                                        padding:
-                                            EdgeInsets.symmetric(horizontal: 8),
-                                        child: Text(
-                                          'Suggestions:',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold),
-                                        ),
+                              : [
+                                  if (_errorText != "") ...[
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      child: Text(
+                                        _errorText,
+                                        style: const TextStyle(
+                                            color: Colors.red, fontSize: 18),
                                       ),
-                                      ...suggestions.map(
-                                        (s) => Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 4),
-                                          child: ActionChip(
-                                            label: Text(s),
-                                            onPressed: () {
-                                              print('Selected suggestion: $s');
-                                              _answerController.text = s;
-                                              answers[currentQuestion] = s;
-                                            },
-                                          ),
-                                        ),
+                                    ),
+                                  ] else ...[
+                                    const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(horizontal: 8),
+                                      child: Text(
+                                        'No suggestions yet',
+                                        style: TextStyle(color: Colors.grey),
                                       ),
-                                    ]
-                                  : [
-                                      const Padding(
-                                        padding:
-                                            EdgeInsets.symmetric(horizontal: 8),
-                                        child: Text(
-                                          'No suggestions yet',
-                                          style: TextStyle(color: Colors.grey),
-                                        ),
-                                      ),
-                                    ],
+                                    ),
+                                  ],
+                                ],
                         ),
                       ),
                       const Spacer(),
