@@ -1,50 +1,33 @@
-// ignore_for_file: avoid_print
-
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 final model = GenerativeModel(
-    model: "gemma-3-12b-it", apiKey: dotenv.env['GEMINI_API_KEY']!);
+    model: "gemini-2.0-flash", apiKey: dotenv.env['GEMINI_API_KEY']!);
 
-class NameFieldResult {
-  final List<String>? suggestions;
-  final String? error;
-
-  NameFieldResult({this.suggestions, this.error});
-
-  bool get hasError => error != null;
-}
-
-Future<NameFieldResult> handleNameField(
-    String question, String userAnswer) async {
+//Response for Form Inputs
+Future<List<String>> handleNameField(String question, String userAnswer) async {
   const instruction = '''
-You are processing a name field in a speech-to-text enrollment form. Your task:
+You are processing a name field in a speech-to-text enrollment form.
 
-1. If the user’s answer is ambiguous or may contain transcription errors, generate 3–5 distinct corrected versions of the name, accounting for common errors like reversed order or misunderstood pronunciation.
+Return a JSON array (3–5 items) of likely corrected versions of the user's spoken name. Consider:
+- common transcription issues (e.g., "Alberto" → "Albert"),
+- misunderstood pronunciation or missing parts.
 
-2. If the user’s answer is already clear and unambiguous, return only one properly capitalized corrected version.
+⚠️ Strict format:
+- Do NOT include explanations or extra text.
+- Respond only with a valid JSON array of strings.
 
-3. Capitalize names properly (first letters uppercase, others lowercase).
+If the input is clearly unrelated (like an address, date, or school name), respond with:
 
-4. If the response appears unrelated (address, date, school name), return an error JSON:
-{"error": {"message": "That seems like a [type], but we’re asking for a name."}}
+{
+  "error": {
+    "message": "That seems like a [type], but we’re asking for a name."
+  }
+}
 ''';
 
-  final expectedComponent = () {
-    final lower = question.toLowerCase();
-    if (lower.contains("first")) return "first name";
-    if (lower.contains("last")) return "last name";
-    if (lower.contains("middle")) return "middle name";
-    if (lower.contains("extension")) return "name extension";
-    return "name";
-  }();
-
-  final prompt = '''
-Form field: "$question"
-Expected component: $expectedComponent
-Transcribed user answer: "$userAnswer"
-''';
+  final prompt = "Form field: '$question'. Transcribed answer: '$userAnswer'.";
 
   final content = [
     Content.text(instruction),
@@ -67,20 +50,18 @@ Transcribed user answer: "$userAnswer"
 
   try {
     final dynamic jsonResponse = jsonDecode(rawText!);
-
     if (jsonResponse is List) {
-      return NameFieldResult(suggestions: jsonResponse.cast<String>());
+      return (jsonResponse).cast<String>();
     } else if (jsonResponse is Map && jsonResponse.containsKey("error")) {
-      final errorMessage = jsonResponse["error"]["message"] ?? "Unknown error";
-      print("Model returned an error: $errorMessage");
-      return NameFieldResult(error: errorMessage);
+      print("Model returned an error: ${jsonResponse["error"]}");
+      return [];
     } else {
       print("Unexpected JSON response format: $rawText");
-      return NameFieldResult(error: "Unexpected response format.");
+      return [];
     }
   } catch (e) {
     print("Failed to parse response: $rawText");
-    return NameFieldResult(error: "Failed to process model response.");
+    return [];
   }
 }
 
@@ -112,24 +93,8 @@ Assume common speech-to-text errors, such as:
 - Misheard local place names
 ''';
 
-  final expectedComponent = () {
-    final q = question.toLowerCase();
-    if (q.contains("barangay")) return "barangay";
-    if (q.contains("municipality") || q.contains("city")) {
-      return "municipality or city";
-    }
-    if (q.contains("province")) return "province";
-    if (q.contains("street") || q.contains("sitio") || q.contains("house")) {
-      return "street or sitio";
-    }
-    return "address component";
-  }();
-
-  final prompt = '''
-Current form field: "$question"
-Expected address component: $expectedComponent
-Transcribed user answer: "$userAnswer"
-''';
+  final prompt =
+      "Current form field: '$question'. Transcribed answer: '$userAnswer'.";
 
   final content = [
     Content.text(instruction),
@@ -170,25 +135,23 @@ Transcribed user answer: "$userAnswer"
 Future<List<String>> handleEducationalInformationField(
     String question, String userAnswer) async {
   const instruction = '''
-You are processing a Philippine enrollment form that asks for educational background. The form field may be one of the following:
+You are processing an educational background field in a Philippine enrollment form. The form may ask for components like:
 
-- **Last School Attended** (e.g., "Gordon College", "San Juan High School")
-- **Last grade level completed** (e.g., "Grade 10", "Senior High", "First Year College")
-- **Reason for not completing school** (e.g., "financial problems", "family matters")
-- **Attendance in ALS learning sessions** (e.g., "Yes", "No")
+- **School name** (e.g., "Gordon College", "San Juan National High School")
+- **Educational level** (e.g., "Senior High", "College", "Vocational")
+- **Course or strand** (e.g., "BSIT", "STEM", "HUMSS")
+- **Year graduated** (e.g., "2020", "2023")
 
 Your task:
-1. Based on the current field, generate 3–5 likely corrected versions of the user's answer. Account for speech-to-text errors.
-2. If the answer clearly belongs to another field (e.g., says "Grade 12" when the question is about school name), return:
+1. Generate 3–5 likely corrected transcriptions of the user's answer.
+2. If the user gave an answer that clearly matches a *different* field (e.g., "2022" when the question asks for a school name), return:
 
 {"error": {"message": "It seems you gave a [actual component], but we’re asking for your [expected component]."}}
 
-Typical speech-to-text mistakes:
-- Misheard school names (e.g., “San Juan” → “Saint John”)
-- Answers being too short or generic
-- Transcribing "yes" as "guess", or "no" as "know"
-
-Only return corrected interpretations if the answer reasonably fits the current question.
+Common speech-to-text mistakes:
+- Misheard acronyms ("BSIT" as "B S I T" or "Business IT")
+- Dates being transcribed as words
+- Swapped order of words (e.g., "High School San Juan" instead of "San Juan High School")
 ''';
 
   final prompt =
@@ -204,7 +167,7 @@ Only return corrected interpretations if the answer reasonably fits the current 
   final response = await model.generateContent(content);
   String? rawText = response.text;
 
-  // Remove markdown/code block formatting if present
+  // Strip code block markers
   if (rawText != null && rawText.startsWith("```")) {
     final codeBlockRegex = RegExp(r"```(?:json)?\s*([\s\S]*?)\s*```");
     final match = codeBlockRegex.firstMatch(rawText);
@@ -298,5 +261,7 @@ Be strict but helpful. All answers should be plausible transcriptions or valid c
     return [];
   }
 }
+
+
 
 //Response for Inquiries
