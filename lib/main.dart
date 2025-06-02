@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         primaryColor: const Color(0xff0C15A6),
         secondaryHeaderColor: const Color(0xff40AD5F),
-        splashColor: const Color(0xffD00C0C),
+        splashColor: const Color.fromARGB(255, 5, 175, 53),
         useMaterial3: true,
       ),
       initialRoute: '/',

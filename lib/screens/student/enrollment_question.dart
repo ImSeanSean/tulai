@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:tulai/core/app_config.dart';
@@ -7,6 +9,7 @@ import 'package:tulai/screens/student/enrollment_success.dart';
 import 'package:tulai/services/gemini.dart';
 import 'package:tulai/services/student_db.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:tulai/widgets/appbar.dart';
 
 class EnrollmentQuestions extends StatefulWidget {
   const EnrollmentQuestions({super.key});
@@ -20,7 +23,9 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
   final SpeechToText _speechToText = SpeechToText();
   bool _speechEnabled = false;
   String _wordsSpoken = "";
+  String? _errorText;
   double _confidenceLevel = 0;
+  List<String> suggestions = [];
 
   late final List<String> allQuestions;
   int _currentQuestionIndex = 0;
@@ -32,6 +37,13 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
   void initState() {
     super.initState();
     initSpeech();
+
+    _speechToText.statusListener = (status) {
+      print("[DEBUG] Speech status: $status");
+      if (status == "done" || status == "notListening") {
+        setState(() {});
+      }
+    };
 
     if (AppConfig().formLanguage == FormLanguage.filipino) {
       allQuestions = [
@@ -85,10 +97,12 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
       _speechEnabled = available;
     });
 
-    if (!available) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Speech recognition is not available')),
-      );
+    if (mounted) {
+      if (!available) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Speech recognition is not available')),
+        );
+      }
     }
   }
 
@@ -98,8 +112,7 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
         onResult: _onSpeechResult,
         listenFor: const Duration(seconds: 10),
         pauseFor: const Duration(seconds: 3),
-        partialResults: false,
-        localeId: 'en_US', // or "fil_PH" if Filipino
+        localeId: 'en_US',
       );
       setState(() {});
     } catch (e) {
@@ -115,34 +128,69 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
   }
 
   void _onSpeechResult(result) async {
-    setState(() {
-      _wordsSpoken = result.recognizedWords;
-      _confidenceLevel = result.confidence;
+    final spokenWords = result.recognizedWords;
+    final confidence = result.confidence;
+    final currentQuestion = allQuestions[_currentQuestionIndex];
 
-      final currentQuestion = allQuestions[_currentQuestionIndex];
-      _answerController.text = _wordsSpoken;
-      answers[currentQuestion] = _wordsSpoken;
-    });
+    final currentField = currentQuestion;
+    List<String> newSuggestions = [];
+    String? errorMessage;
 
-    final currentField = allQuestions[_currentQuestionIndex];
-    List<String> suggestions = [];
-
-    // Determine which handler to use based on the current question
-    if (formQuestionsName.contains(currentField)) {
-      suggestions = await handleNameField(currentField, _wordsSpoken);
+    // Determine which handler to use
+    if (formQuestionsName.contains(currentField) ||
+        formQuestionsFatherGuardian.contains(currentField) ||
+        formQuestionsMotherGuardian.contains(currentField)) {
+      final result = await handleNameField(currentField, spokenWords);
+      if (result.hasError) {
+        setState(() {
+          _errorText = result.error!;
+          _answerController.text = '';
+          answers.remove(currentQuestion);
+          suggestions = [];
+        });
+        return;
+      } else {
+        newSuggestions = result.suggestions ?? [];
+      }
     } else if (formQuestionsAddress.contains(currentField)) {
-      suggestions = await handleAddressField(currentField, _wordsSpoken);
+      newSuggestions = await handleAddressField(currentField, spokenWords);
     } else if (formQuestionsOthers.contains(currentField)) {
-      suggestions = await handleOtherField(currentField, _wordsSpoken);
-    } else if (formQuestionsFatherGuardian.contains(currentField)) {
-      suggestions = await handleNameField(currentField, _wordsSpoken);
-    } else if (formQuestionsMotherGuardian.contains(currentField)) {
-      suggestions = await handleNameField(currentField, _wordsSpoken);
+      newSuggestions = await handleOtherField(currentField, spokenWords);
     } else if (formQuestionsEducationalInfo.contains(currentField)) {
-      suggestions = await handleNameField(currentField, _wordsSpoken);
+      newSuggestions =
+          await handleEducationalInformationField(currentField, spokenWords);
     }
 
-    // Use or display suggestions as needed
+    // Check if suggestions contain an error
+    if (newSuggestions.isEmpty) {
+      // Display error message in the UI
+      errorMessage = "The spoken input does not seem valid for this question.";
+      print("Error: $errorMessage");
+
+      setState(() {
+        _wordsSpoken = spokenWords;
+        _confidenceLevel = confidence;
+        suggestions = [];
+        _answerController.text = '';
+        answers.remove(
+            currentQuestion); // Remove any previously saved invalid answer
+        _errorText =
+            errorMessage!; // <-- Set this in your UI as a visible message
+      });
+      return; // Stop here — don't update the answer
+    }
+
+    // If valid suggestions exist, update answer normally
+    setState(() {
+      _wordsSpoken = spokenWords;
+      _confidenceLevel = confidence;
+      suggestions = newSuggestions;
+      _answerController.text =
+          newSuggestions.first; // Show the first suggestion
+      answers[currentQuestion] = newSuggestions.first;
+      _errorText = "";
+    });
+
     print("Suggested answers: $suggestions");
     print("Confidence Level: $_confidenceLevel");
   }
@@ -249,32 +297,7 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        leading: Padding(
-          padding: const EdgeInsets.all(1.0),
-          child: Image.asset(
-            'assets/images/deped-logo.png',
-            fit: BoxFit.contain,
-          ),
-        ),
-        title: Text(
-          "Enrollment - ${_getCurrentSectionTitle()}",
-          style: TextStyle(
-            color: Theme.of(context).splashColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Image.asset(
-              'assets/images/als-logo.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-        ],
-      ),
+      appBar: const CustomAppBar(),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -287,13 +310,21 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                 child: IntrinsicHeight(
                   child: Column(
                     children: [
+                      Align(
+                          alignment: Alignment.centerLeft,
+                          child: IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                          )),
                       const SizedBox(height: 10),
                       Center(
                         child: Text(
                           currentQuestion,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: 25,
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).primaryColor,
                           ),
@@ -310,6 +341,63 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                               hintText: 'Enter your answer',
                             ),
                           )),
+                      const SizedBox(height: 20),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _errorText != null && _errorText!.isNotEmpty
+                              ? [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
+                                    child: Text(
+                                      _errorText!,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ]
+                              : suggestions.isNotEmpty
+                                  ? [
+                                      const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(horizontal: 8),
+                                        child: Text(
+                                          'Suggestions:',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      ...suggestions.map(
+                                        (s) => Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4),
+                                          child: ActionChip(
+                                            label: Text(s),
+                                            onPressed: () {
+                                              print('Selected suggestion: $s');
+                                              _answerController.text = s;
+                                              answers[currentQuestion] = s;
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ]
+                                  : [
+                                      const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(horizontal: 8),
+                                        child: Text(
+                                          'No suggestions yet',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      ),
+                                    ],
+                        ),
+                      ),
                       const Spacer(),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -317,7 +405,12 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                           ElevatedButton(
                             onPressed: _currentQuestionIndex == 0
                                 ? null
-                                : _previousQuestion,
+                                : () {
+                                    setState(() {
+                                      suggestions = [];
+                                    });
+                                    _previousQuestion();
+                                  },
                             child: const Text('Previous'),
                           ),
                           IconButton(
@@ -376,6 +469,7 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                                   insertStudent();
                                 }
                               } else {
+                                suggestions = [];
                                 _nextQuestion();
                               }
                             },
