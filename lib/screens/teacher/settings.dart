@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:tulai/core/app_config.dart';
-import 'package:tulai/widgets/appbar.dart';
 
 class TeacherSettings extends StatelessWidget {
   const TeacherSettings({super.key});

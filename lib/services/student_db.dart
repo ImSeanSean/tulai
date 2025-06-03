@@ -33,6 +33,7 @@ class Student {
   final String? lastGradeLevelCompleted;
   final String? reasonForIncompleteSchooling;
   final bool? hasAttendedALS;
+  // ignore: non_constant_identifier_names
   final DateTime? created_at;
 
   Student({
@@ -66,6 +67,7 @@ class Student {
     this.lastGradeLevelCompleted,
     this.reasonForIncompleteSchooling,
     this.hasAttendedALS,
+    // ignore: non_constant_identifier_names
     this.created_at,
   });
 
