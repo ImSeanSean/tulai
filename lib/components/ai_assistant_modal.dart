@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:tulai/core/app_config.dart';
-import 'package:tulai/services/ai_asssistance_service.dart';
+import 'package:tulai/services/ai_assistance_service.dart';
 
 class AiAssistantModal extends StatefulWidget {
   const AiAssistantModal({super.key});
