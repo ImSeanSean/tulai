@@ -13,6 +13,12 @@ import 'package:tulai/services/student_db.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tulai/widgets/appbar.dart';
 
+class QuestionSection {
+  final String section;
+  final String question;
+  QuestionSection(this.section, this.question);
+}
+
 class EnrollmentQuestions extends StatefulWidget {
   const EnrollmentQuestions({super.key});
 
@@ -30,7 +36,7 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
   String _lastProcessed = "";
   List<String> suggestions = [];
 
-  late final List<String> allQuestions;
+  late final List<QuestionSection> allQuestions;
   int _currentQuestionIndex = 0;
   final Map<String, String> answers = {};
   final TextEditingController _answerController = TextEditingController();
@@ -43,21 +49,26 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
 
     if (AppConfig().formLanguage == FormLanguage.filipino) {
       allQuestions = [
-        ...formQuestionsNameFilipino,
-        ...formQuestionsAddressFilipino,
-        ...formQuestionsOthersFilipino,
-        ...formQuestionsFatherGuardianFilipino,
-        ...formQuestionsMotherGuardianFilipino,
-        ...formQuestionsEducationalInfoFilipino,
+        ...formQuestionsNameFilipino.map((q) => QuestionSection('enrollee', q)),
+        ...formQuestionsAddressFilipino
+            .map((q) => QuestionSection('address', q)),
+        ...formQuestionsOthersFilipino.map((q) => QuestionSection('others', q)),
+        ...formQuestionsFatherGuardianFilipino
+            .map((q) => QuestionSection('father', q)),
+        ...formQuestionsMotherGuardianFilipino
+            .map((q) => QuestionSection('mother', q)),
+        ...formQuestionsEducationalInfoFilipino
+            .map((q) => QuestionSection('education', q)),
       ];
     } else {
       allQuestions = [
-        ...formQuestionsName,
-        ...formQuestionsAddress,
-        ...formQuestionsOthers,
-        ...formQuestionsFatherGuardian,
-        ...formQuestionsMotherGuardian,
-        ...formQuestionsEducationalInfo,
+        ...formQuestionsName.map((q) => QuestionSection('enrollee', q)),
+        ...formQuestionsAddress.map((q) => QuestionSection('address', q)),
+        ...formQuestionsOthers.map((q) => QuestionSection('others', q)),
+        ...formQuestionsFatherGuardian.map((q) => QuestionSection('father', q)),
+        ...formQuestionsMotherGuardian.map((q) => QuestionSection('mother', q)),
+        ...formQuestionsEducationalInfo
+            .map((q) => QuestionSection('education', q)),
       ];
     }
   }
@@ -137,34 +148,51 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
       _wordsSpoken = newTranscript;
       _confidenceLevel = result.confidence;
 
-      final currentQuestion = allQuestions[_currentQuestionIndex];
+      final currentQ = allQuestions[_currentQuestionIndex];
       _answerController.text = _wordsSpoken
           .toLowerCase()
           .split(' ')
           .map((word) =>
               word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
           .join(' ');
-      answers[currentQuestion] = _wordsSpoken;
+      answers['${currentQ.section}:${currentQ.question}'] = _wordsSpoken;
     });
 
-    final currentField = allQuestions[_currentQuestionIndex];
+    final currentQ = allQuestions[_currentQuestionIndex];
+    final currentField = currentQ.question;
     List<String> newSuggestions = [];
 
     print("🔊 Words Spoken: '$_wordsSpoken'");
     print("📝 Current Field: '$currentField'");
 
-    if (formQuestionsName.contains(currentField) ||
-        formQuestionsFatherGuardian.contains(currentField) ||
-        formQuestionsMotherGuardian.contains(currentField)) {
+    final isFilipino = AppConfig().formLanguage == FormLanguage.filipino;
+
+    if ((isFilipino ? formQuestionsNameFilipino : formQuestionsName)
+            .contains(currentField) ||
+        (isFilipino
+                ? formQuestionsFatherGuardianFilipino
+                : formQuestionsFatherGuardian)
+            .contains(currentField) ||
+        (isFilipino
+                ? formQuestionsMotherGuardianFilipino
+                : formQuestionsMotherGuardian)
+            .contains(currentField)) {
       print("🔍 Using name field handler");
       newSuggestions = await handleNameField(currentField, _wordsSpoken);
-    } else if (formQuestionsAddress.contains(currentField)) {
+    } else if ((isFilipino
+            ? formQuestionsAddressFilipino
+            : formQuestionsAddress)
+        .contains(currentField)) {
       print("🔍 Using address field handler");
       newSuggestions = await handleAddressField(currentField, _wordsSpoken);
-    } else if (formQuestionsOthers.contains(currentField)) {
+    } else if ((isFilipino ? formQuestionsOthersFilipino : formQuestionsOthers)
+        .contains(currentField)) {
       print("🔍 Using other field handler");
       newSuggestions = await handleOtherField(currentField, _wordsSpoken);
-    } else if (formQuestionsEducationalInfo.contains(currentField)) {
+    } else if ((isFilipino
+            ? formQuestionsEducationalInfoFilipino
+            : formQuestionsEducationalInfo)
+        .contains(currentField)) {
       print("🔍 Using educational field handler");
       newSuggestions =
           await handleEducationalInformationField(currentField, _wordsSpoken);
@@ -201,59 +229,79 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
   }
 
   void _onAnswerChanged(String value) {
-    final question = allQuestions[_currentQuestionIndex];
-    answers[question] = value;
+    final q = allQuestions[_currentQuestionIndex];
+    answers['${q.section}:${q.question}'] = value;
   }
 
   String _getCurrentSectionTitle() {
-    final q = allQuestions[_currentQuestionIndex];
-    if (formQuestionsName.contains(q)) return 'Name';
-    if (formQuestionsAddress.contains(q)) return 'Address';
-    if (formQuestionsOthers.contains(q)) return 'Other Info';
-    if (formQuestionsFatherGuardian.contains(q)) return 'Father/Guardian';
-    if (formQuestionsMotherGuardian.contains(q)) return 'Mother/Guardian';
-    if (formQuestionsEducationalInfo.contains(q)) return 'Educational Info';
-    return 'Enrollment';
+    final section = allQuestions[_currentQuestionIndex].section;
+    final isFilipino = AppConfig().formLanguage == FormLanguage.filipino;
+    switch (section) {
+      case 'enrollee':
+        return isFilipino ? "Pangalan ng Mag-eenroll" : "Enrollee's Name";
+      case 'address':
+        return isFilipino ? "Tirahan" : "Address";
+      case 'others':
+        return isFilipino
+            ? "Iba Pang Personal na Impormasyon"
+            : "Other Personal Information";
+      case 'father':
+        return isFilipino
+            ? "Pangalan ng Ama/Tagapangalaga"
+            : "Father/Guardian's Name";
+      case 'mother':
+        return isFilipino
+            ? "Pangalan ng Ina/Tagapangalaga"
+            : "Mother/Guardian's Name";
+      case 'education':
+        return isFilipino
+            ? "Impormasyon sa Edukasyon"
+            : "Educational Information";
+      default:
+        return isFilipino ? "Pagpaparehistro" : "Enrollment";
+    }
   }
 
   Future<void> insertStudent() async {
     try {
       // Create Student instance from your answers map
       final student = Student(
-        lastName: answers['Last Name'],
-        firstName: answers['First Name'],
-        middleName: answers['Middle Name'],
-        nameExtension: answers['Name Extension'],
-        houseStreetSitio: answers['House No./Street/Sitio'],
-        barangay: answers['Barangay'],
-        municipalityCity: answers['Municipality/City'],
-        province: answers['Province'],
-        birthdate: DateTime.tryParse(answers['Birthdate (mm/dd/yyyy)'] ?? ''),
-        sex: answers['Sex (Male/Female)'],
-        placeOfBirth: answers['Place of Birth (Municipality/City)'],
+        lastName: answers['enrollee:Last Name'],
+        firstName: answers['enrollee:First Name'],
+        middleName: answers['enrollee:Middle Name'],
+        nameExtension: answers['enrollee:Name Extension'],
+        houseStreetSitio: answers['address:House No./Street/Sitio'],
+        barangay: answers['address:Barangay'],
+        municipalityCity: answers['address:Municipality/City'],
+        province: answers['address:Province'],
+        birthdate:
+            DateTime.tryParse(answers['others:Birthdate (mm/dd/yyyy)'] ?? ''),
+        sex: answers['others:Sex (Male/Female)'],
+        placeOfBirth: answers['others:Place of Birth (Municipality/City)'],
         civilStatus: answers[
-            'Civil Status (Single, Married, Separated, Widower, Solo Parent)'],
-        religion: answers['Religion'],
-        ethnicGroup: answers['IP (Specify ethnic group):'],
-        motherTongue: answers['Mother Tongue'],
-        contactNumber: answers['Contact Number/s'],
-        isPWD: (answers['PWD (Yes/No)']?.toLowerCase() == 'yes'),
-        fatherLastName: answers['Father/Guardian Last Name'],
-        fatherFirstName: answers['Father/Guardian First Name'],
-        fatherMiddleName: answers['Father/Guardian Middle Name'],
-        fatherOccupation: answers['Father/Guardian Occupation'],
-        motherLastName: answers['Mother/Guardian Last Name'],
-        motherFirstName: answers['Mother/Guardian First Name'],
-        motherMiddleName: answers['Mother/Guardian Middle Name'],
-        motherOccupation: answers['Mother/Guardian Occupation'],
-        lastSchoolAttended: answers['Last School Attended'],
-        lastGradeLevelCompleted: answers['Last grade level completed'],
+            'others:Civil Status (Single, Married, Separated, Widower, Solo Parent)'],
+        religion: answers['others:Religion'],
+        ethnicGroup: answers['others:IP (Specify ethnic group):'],
+        motherTongue: answers['others:Mother Tongue'],
+        contactNumber: answers['others:Contact Number/s'],
+        isPWD: (answers['others:PWD (Yes/No)']?.toLowerCase() == 'yes'),
+        fatherLastName: answers['father:Father/Guardian Last Name'],
+        fatherFirstName: answers['father:Father/Guardian First Name'],
+        fatherMiddleName: answers['father:Father/Guardian Middle Name'],
+        fatherOccupation: answers['father:Father/Guardian Occupation'],
+        motherLastName: answers['mother:Mother/Guardian Last Name'],
+        motherFirstName: answers['mother:Mother/Guardian First Name'],
+        motherMiddleName: answers['mother:Mother/Guardian Middle Name'],
+        motherOccupation: answers['mother:Mother/Guardian Occupation'],
+        lastSchoolAttended: answers['education:Last School Attended'],
+        lastGradeLevelCompleted:
+            answers['education:Last grade level completed'],
         reasonForIncompleteSchooling:
-            answers['Why did you not attend/complete schooling?'],
-        hasAttendedALS:
-            (answers['Have you attended ALS learning sessions before? (Yes/No)']
-                    ?.toLowerCase() ==
-                'yes'),
+            answers['education:Why did you not attend/complete schooling?'],
+        hasAttendedALS: (answers[
+                    'education:Have you attended ALS learning sessions before? (Yes/No)']
+                ?.toLowerCase() ==
+            'yes'),
       );
 
       // Insert student using your helper class
@@ -278,10 +326,11 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
 
   @override
   Widget build(BuildContext context) {
-    final currentQuestion = allQuestions[_currentQuestionIndex];
-    if (_lastQuestion != currentQuestion) {
-      _answerController.text = answers[currentQuestion] ?? '';
-      _lastQuestion = currentQuestion;
+    final currentQ = allQuestions[_currentQuestionIndex];
+    final currentKey = '${currentQ.section}:${currentQ.question}';
+    if (_lastQuestion != currentKey) {
+      _answerController.text = answers[currentKey] ?? '';
+      _lastQuestion = currentKey;
     }
 
     return Scaffold(
@@ -328,9 +377,18 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                         ],
                       ),
                       const SizedBox(height: 10),
+                      Text(
+                        _getCurrentSectionTitle(),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       Center(
                         child: Text(
-                          currentQuestion,
+                          currentQ.question,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 35,
@@ -395,38 +453,46 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                       const SizedBox(height: 20),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: suggestions.isNotEmpty
-                              ? [
-                                  const Padding(
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 8),
-                                    child: Text(
+                        child: suggestions.isNotEmpty
+                            ? Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    const Text(
                                       'Suggestions:',
                                       style: TextStyle(
                                           fontSize: 23,
                                           fontWeight: FontWeight.bold),
                                     ),
-                                  ),
-                                  ...suggestions.map(
-                                    (s) => Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 4),
-                                      child: ActionChip(
-                                        label: Text(
-                                          s,
-                                          style: const TextStyle(fontSize: 25),
-                                        ),
-                                        onPressed: () {
-                                          print('Selected suggestion: $s');
-                                          _answerController.text = s;
-                                          answers[currentQuestion] = s;
-                                        },
-                                      ),
+                                    const SizedBox(width: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: suggestions
+                                          .map(
+                                            (s) => ActionChip(
+                                              label: Text(
+                                                s,
+                                                style: const TextStyle(
+                                                    fontSize: 25),
+                                              ),
+                                              onPressed: () {
+                                                print(
+                                                    'Selected suggestion: $s');
+                                                _answerController.text = s;
+                                                answers[currentKey] = s;
+                                              },
+                                            ),
+                                          )
+                                          .toList(),
                                     ),
-                                  ),
-                                ]
-                              : [
+                                  ],
+                                ),
+                              )
+                            : Row(
+                                children: [
                                   if (_errorText != "") ...[
                                     Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -449,7 +515,7 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                                     ),
                                   ],
                                 ],
-                        ),
+                              ),
                       ),
                       const Spacer(),
                       Row(
