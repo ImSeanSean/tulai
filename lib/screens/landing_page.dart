@@ -13,7 +13,7 @@ class LandingPage extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             const SizedBox(
-              height: 100,
+              height: 200,
               child: Image(image: AssetImage('assets/images/als-logo.png')),
             ),
             Text(

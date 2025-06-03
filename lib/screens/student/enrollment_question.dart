@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:tulai/components/ai_assistant_modal.dart';
 import 'package:tulai/core/app_config.dart';
 import 'package:tulai/core/constants.dart';
 import 'package:tulai/screens/student/enrollment_review.dart';
@@ -298,14 +299,33 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                 child: IntrinsicHeight(
                   child: Column(
                     children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          child: const Icon(Icons.arrow_back),
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              size: 30,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Image.asset(
+                              'assets/images/tulai-logo.png',
+                              width: 70,
+                              height: 70,
+                            ),
+                            tooltip: 'AI Assistant',
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => const AiAssistantModal(),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
                       Center(
@@ -313,92 +333,27 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                           currentQuestion,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: 35,
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).primaryColor,
                           ),
                         ),
                       ),
                       const SizedBox(height: 20),
-                      SizedBox(
-                          width: MediaQuery.of(context).size.width * 0.7,
-                          child: TextField(
-                            controller: _answerController,
-                            onChanged: _onAnswerChanged,
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              hintText: 'Enter your answer',
-                            ),
-                          )),
-                      const SizedBox(height: 20),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: suggestions.isNotEmpty
-                              ? [
-                                  const Padding(
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 8),
-                                    child: Text(
-                                      'Suggestions:',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  ...suggestions.map(
-                                    (s) => Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 4),
-                                      child: ActionChip(
-                                        label: Text(s),
-                                        onPressed: () {
-                                          print('Selected suggestion: $s');
-                                          _answerController.text = s;
-                                          answers[currentQuestion] = s;
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ]
-                              : [
-                                  if (_errorText != "") ...[
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8),
-                                      child: Text(
-                                        _errorText,
-                                        style: const TextStyle(
-                                            color: Colors.red, fontSize: 18),
-                                      ),
-                                    ),
-                                  ] else ...[
-                                    const Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 8),
-                                      child: Text(
-                                        'No suggestions yet',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                        ),
-                      ),
-                      const Spacer(),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          ElevatedButton(
-                            onPressed: _currentQuestionIndex == 0
-                                ? null
-                                : () {
-                                    setState(() {
-                                      suggestions = [];
-                                    });
-                                    _previousQuestion();
-                                  },
-                            child: const Text('Previous'),
-                          ),
+                          SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.65,
+                              child: TextField(
+                                style: const TextStyle(fontSize: 33),
+                                controller: _answerController,
+                                onChanged: _onAnswerChanged,
+                                decoration: const InputDecoration(
+                                  border: OutlineInputBorder(),
+                                  hintText: 'Enter your answer',
+                                ),
+                              )),
                           IconButton(
                             onPressed: _speechEnabled
                                 ? () {
@@ -430,10 +385,89 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                                   ? Colors.red
                                   : const Color(0xffEF8C4B),
                             ),
-                            iconSize: 32,
+                            iconSize: 50,
                             tooltip: _speechToText.isListening
                                 ? "Stop Listening"
                                 : "Start Listening",
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: suggestions.isNotEmpty
+                              ? [
+                                  const Padding(
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 8),
+                                    child: Text(
+                                      'Suggestions:',
+                                      style: TextStyle(
+                                          fontSize: 23,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  ...suggestions.map(
+                                    (s) => Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4),
+                                      child: ActionChip(
+                                        label: Text(
+                                          s,
+                                          style: const TextStyle(fontSize: 25),
+                                        ),
+                                        onPressed: () {
+                                          print('Selected suggestion: $s');
+                                          _answerController.text = s;
+                                          answers[currentQuestion] = s;
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ]
+                              : [
+                                  if (_errorText != "") ...[
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      child: Text(
+                                        _errorText,
+                                        style: const TextStyle(
+                                            color: Colors.red, fontSize: 18),
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(horizontal: 8),
+                                      child: Text(
+                                        'No suggestions yet',
+                                        style: TextStyle(
+                                            color: Colors.grey, fontSize: 23),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          ElevatedButton(
+                            onPressed: _currentQuestionIndex == 0
+                                ? null
+                                : () {
+                                    setState(() {
+                                      suggestions = [];
+                                    });
+                                    _previousQuestion();
+                                  },
+                            child: const Text(
+                              'Previous',
+                              style: TextStyle(fontSize: 25),
+                            ),
                           ),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
@@ -463,7 +497,8 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                               _currentQuestionIndex == allQuestions.length - 1
                                   ? 'Submit'
                                   : 'Next',
-                              style: const TextStyle(color: Colors.white),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 25),
                             ),
                           ),
                         ],

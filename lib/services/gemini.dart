@@ -87,7 +87,12 @@ If mismatched, respond with:
 Otherwise, return an array like:
 ["Barangay San Juan", "Brgy. San Juan", "San Juan Barangay", ...]
 
+⚠️ Strict format:
+- Do NOT include explanations or extra text.
+- Respond only with a valid JSON array of strings.
+
 Assume common speech-to-text errors, such as:
+-"Number" should be "#"
 - "Brgy" vs "Barangay"
 - Wrong word order
 - Misheard local place names
@@ -147,6 +152,10 @@ Your task:
 2. If the user gave an answer that clearly matches a *different* field (e.g., "2022" when the question asks for a school name), return:
 
 {"error": {"message": "It seems you gave a [actual component], but we’re asking for your [expected component]."}}
+
+⚠️ Strict format:
+- Do NOT include explanations or extra text.
+- Respond only with a valid JSON array of strings.
 
 Common speech-to-text mistakes:
 - Misheard acronyms ("BSIT" as "B S I T" or "Business IT")
@@ -214,6 +223,10 @@ Your job is to:
 3. If the user’s answer clearly belongs to a different type (e.g., says “Catholic” when the form asks for a contact number), respond with:
 
 {"error": {"message": "It seems you gave a [actual type], but we’re asking for your [expected type]."}}
+
+⚠️ Strict format:
+- Do NOT include explanations or extra text.
+- Respond only with a valid JSON array of strings.
 
 Typical mistakes:
 - Saying “May twenty three two thousand one” → should be "05/23/2001"
