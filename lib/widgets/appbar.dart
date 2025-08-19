@@ -1,49 +1,119 @@
 import 'package:flutter/material.dart';
+import 'package:tulai/core/design_system.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   const CustomAppBar({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final isLargeScreen = TulaiResponsive.isLargeScreen(context);
+
+    return Container(
       height: 80,
+      decoration: BoxDecoration(
+        color: TulaiColors.backgroundPrimary,
+        boxShadow: TulaiShadows.md,
+        border: Border(
+          bottom: BorderSide(
+            color: TulaiColors.borderLight,
+            width: 1,
+          ),
+        ),
+      ),
       child: AppBar(
         toolbarHeight: 80,
-        leading: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        leading: Container(
+          margin: const EdgeInsets.all(TulaiSpacing.sm),
+          padding: const EdgeInsets.all(TulaiSpacing.xs),
+          decoration: BoxDecoration(
+            color: TulaiColors.backgroundSecondary,
+            borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
+            border: Border.all(
+              color: TulaiColors.borderLight,
+              width: 1,
+            ),
+          ),
           child: Image.asset(
             'assets/images/deped-logo.png',
-            width: 60,
-            height: 60,
             fit: BoxFit.contain,
           ),
         ),
-        title: RichText(
-          text: TextSpan(
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 30,
-              color: Theme.of(context).splashColor,
+        title: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: TulaiSpacing.md,
+            vertical: TulaiSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withOpacity(0.1),
+                Colors.white.withOpacity(0.05),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            children: const [
-              TextSpan(
-                  text: 'ALS ', style: TextStyle(color: Color(0xffD00C0C))),
-              TextSpan(
+            borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
+            border: Border.all(
+              color: TulaiColors.borderLight.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: isLargeScreen ? 28 : 20,
+                letterSpacing: 0.5,
+                shadows: const [
+                  Shadow(
+                    offset: Offset(1, 1),
+                    blurRadius: 2,
+                    color: Color(0x40000000),
+                  ),
+                ],
+              ),
+              children: const [
+                TextSpan(
+                  text: 'ALS ',
+                  style: TextStyle(
+                    color: Color(0xFFE53E3E), // Enhanced red
+                  ),
+                ),
+                TextSpan(
                   text: 'Enrollment ',
-                  style: TextStyle(color: Color.fromARGB(255, 29, 107, 51))),
-              TextSpan(
-                  text: 'System', style: TextStyle(color: Color(0xff141EB3))),
-            ],
+                  style: TextStyle(
+                    color: Color(0xFF38A169), // Enhanced green
+                  ),
+                ),
+                TextSpan(
+                  text: 'System',
+                  style: TextStyle(
+                    color: Color(0xFF3182CE), // Enhanced blue
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          Container(
+            margin: const EdgeInsets.all(TulaiSpacing.sm),
+            padding: const EdgeInsets.all(TulaiSpacing.xs),
+            decoration: BoxDecoration(
+              color: TulaiColors.backgroundSecondary,
+              borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
+              border: Border.all(
+                color: TulaiColors.borderLight,
+                width: 1,
+              ),
+            ),
             child: Image.asset(
               'assets/images/als-logo.png',
-              width: 60,
-              height: 60,
               fit: BoxFit.contain,
             ),
           ),

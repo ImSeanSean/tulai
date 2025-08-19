@@ -6,6 +6,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:tulai/components/ai_assistant_modal.dart';
 import 'package:tulai/core/app_config.dart';
 import 'package:tulai/core/constants.dart';
+import 'package:tulai/core/design_system.dart';
 import 'package:tulai/screens/student/enrollment_review.dart';
 import 'package:tulai/screens/student/enrollment_success.dart';
 import 'package:tulai/services/gemini.dart';
@@ -144,18 +145,10 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
     if (newTranscript == _lastProcessed) return;
     _lastProcessed = newTranscript;
 
+    // Store the transcript temporarily, don't set it in the field yet
     setState(() {
       _wordsSpoken = newTranscript;
       _confidenceLevel = result.confidence;
-
-      final currentQ = allQuestions[_currentQuestionIndex];
-      _answerController.text = _wordsSpoken
-          .toLowerCase()
-          .split(' ')
-          .map((word) =>
-              word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
-          .join(' ');
-      answers['${currentQ.section}:${currentQ.question}'] = _wordsSpoken;
     });
 
     final currentQ = allQuestions[_currentQuestionIndex];
@@ -204,8 +197,37 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
       suggestions = newSuggestions;
     });
 
+    // Check if we have an error message in the suggestions
+    bool hasErrorMessage =
+        newSuggestions.any((suggestion) => suggestion.startsWith("ERROR:"));
+
     if (suggestions.isEmpty) {
       _errorText = "Your response is not valid. Please try again.";
+    } else if (hasErrorMessage) {
+      // Extract the error message and display it
+      String errorMessage =
+          newSuggestions.firstWhere((s) => s.startsWith("ERROR:"));
+      _errorText = errorMessage.replaceFirst("ERROR:", "").trim();
+      // Remove the error from suggestions so it doesn't appear as a clickable suggestion
+      suggestions =
+          newSuggestions.where((s) => !s.startsWith("ERROR:")).toList();
+      // Don't update the text field when there's an error
+    } else {
+      // Only update the text field and answers when there's no error
+      final currentQ = allQuestions[_currentQuestionIndex];
+      final formattedText = _wordsSpoken
+          .toLowerCase()
+          .split(' ')
+          .map((word) =>
+              word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
+          .join(' ');
+
+      setState(() {
+        _answerController.text = formattedText;
+        answers['${currentQ.section}:${currentQ.question}'] = formattedText;
+      });
+
+      _errorText = ""; // Clear error text when we have valid suggestions
     }
 
     print("✅ Suggested answers: $suggestions");
@@ -335,12 +357,13 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
+      backgroundColor: TulaiColors.backgroundSecondary,
       appBar: const CustomAppBar(),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(TulaiSpacing.lg),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   minHeight: constraints.maxHeight,
@@ -348,231 +371,476 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                 child: IntrinsicHeight(
                   child: Column(
                     children: [
+                      // Header with centered section title
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          IconButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              size: 30,
+                          // Left: Back button
+                          Container(
+                            decoration: BoxDecoration(
+                              color: TulaiColors.backgroundPrimary,
+                              borderRadius:
+                                  BorderRadius.circular(TulaiBorderRadius.md),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                              icon: Icon(
+                                Icons.arrow_back,
+                                size: 28,
+                                color: TulaiColors.primary,
+                              ),
                             ),
                           ),
-                          IconButton(
-                            icon: Image.asset(
-                              'assets/images/tulai-logo.png',
-                              width: 70,
-                              height: 70,
+                          // Center: Section title
+                          Expanded(
+                            child: Text(
+                              _getCurrentSectionTitle(),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: TulaiColors.primary,
+                                letterSpacing: 0.5,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            tooltip: 'AI Assistant',
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (context) => const AiAssistantModal(),
-                              );
-                            },
+                          ),
+                          // Right: AI Assistant button
+                          Container(
+                            decoration: BoxDecoration(
+                              color: TulaiColors.backgroundPrimary,
+                              borderRadius:
+                                  BorderRadius.circular(TulaiBorderRadius.md),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              icon: Image.asset(
+                                'assets/images/tulai-logo.png',
+                                width: 60,
+                                height: 60,
+                              ),
+                              tooltip: 'AI Assistant',
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) =>
+                                      const AiAssistantModal(),
+                                );
+                              },
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _getCurrentSectionTitle(),
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Center(
+                      const SizedBox(height: TulaiSpacing.md),
+                      // Question with enhanced styling
+                      Container(
+                        padding: const EdgeInsets.all(TulaiSpacing.lg),
                         child: Text(
                           currentQ.question,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 35,
+                            fontSize: 28,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).primaryColor,
+                            color: TulaiColors.textPrimary,
+                            height: 1.2,
+                            letterSpacing: -0.3,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: TulaiSpacing.lg),
+                      // Input field and microphone with enhanced design
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          SizedBox(
-                              width: MediaQuery.of(context).size.width * 0.65,
+                          Expanded(
+                            flex: 3,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: TulaiColors.backgroundPrimary,
+                                borderRadius:
+                                    BorderRadius.circular(TulaiBorderRadius.lg),
+                                border: Border.all(
+                                  color: TulaiColors.borderMedium,
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.08),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
                               child: TextField(
-                                style: const TextStyle(fontSize: 33),
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  color: TulaiColors.textPrimary,
+                                  fontWeight: FontWeight.w500,
+                                ),
                                 controller: _answerController,
                                 onChanged: _onAnswerChanged,
-                                decoration: const InputDecoration(
-                                  border: OutlineInputBorder(),
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
                                   hintText: 'Enter your answer',
+                                  hintStyle: TextStyle(
+                                    color: TulaiColors.textMuted,
+                                    fontSize: 24,
+                                  ),
+                                  contentPadding:
+                                      const EdgeInsets.all(TulaiSpacing.md),
                                 ),
-                              )),
-                          IconButton(
-                            onPressed: _speechEnabled
-                                ? () {
-                                    print("[DEBUG] IconButton pressed");
-                                    print(
-                                        "[DEBUG] _speechEnabled: $_speechEnabled");
-                                    print(
-                                        "[DEBUG] _speechToText.isListening: ${_speechToText.isListening}");
-
-                                    if (_speechToText.isListening) {
-                                      print(
-                                          "[DEBUG] Stopping speech recognition...");
-                                      _stopListening();
-                                    } else {
-                                      print(
-                                          "[DEBUG] Starting speech recognition...");
-                                      _startListening();
-                                    }
-                                  }
-                                : () {
-                                    print(
-                                        "[DEBUG] IconButton pressed but _speechEnabled is false");
-                                  },
-                            icon: Icon(
-                              _speechToText.isListening
-                                  ? Icons.mic
-                                  : Icons.mic_none,
-                              color: _speechToText.isListening
-                                  ? Colors.red
-                                  : const Color(0xffEF8C4B),
+                              ),
                             ),
-                            iconSize: 50,
-                            tooltip: _speechToText.isListening
-                                ? "Stop Listening"
-                                : "Start Listening",
+                          ),
+                          const SizedBox(width: TulaiSpacing.sm),
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: _speechToText.isListening
+                                    ? [TulaiColors.error, Colors.red[700]!]
+                                    : [
+                                        TulaiColors.secondary,
+                                        TulaiColors.accent
+                                      ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius:
+                                  BorderRadius.circular(TulaiBorderRadius.lg),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (_speechToText.isListening
+                                          ? TulaiColors.error
+                                          : TulaiColors.secondary)
+                                      .withOpacity(0.4),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              onPressed: _speechEnabled
+                                  ? () {
+                                      print("[DEBUG] IconButton pressed");
+                                      print(
+                                          "[DEBUG] _speechEnabled: $_speechEnabled");
+                                      print(
+                                          "[DEBUG] _speechToText.isListening: ${_speechToText.isListening}");
+
+                                      if (_speechToText.isListening) {
+                                        print(
+                                            "[DEBUG] Stopping speech recognition...");
+                                        _stopListening();
+                                      } else {
+                                        print(
+                                            "[DEBUG] Starting speech recognition...");
+                                        _startListening();
+                                      }
+                                    }
+                                  : () {
+                                      print(
+                                          "[DEBUG] IconButton pressed but _speechEnabled is false");
+                                    },
+                              icon: Icon(
+                                _speechToText.isListening
+                                    ? Icons.mic
+                                    : Icons.mic_none,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              tooltip: _speechToText.isListening
+                                  ? "Stop Listening"
+                                  : "Start Listening",
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
+                      const SizedBox(height: TulaiSpacing.lg),
+                      // Suggestions section with improved design
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(TulaiSpacing.md),
+                        decoration: BoxDecoration(
+                          color: TulaiColors.backgroundPrimary,
+                          borderRadius:
+                              BorderRadius.circular(TulaiBorderRadius.lg),
+                          border: Border.all(
+                            color: TulaiColors.borderLight,
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
                         child: suggestions.isNotEmpty
-                            ? Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    const Text(
-                                      'Suggestions:',
-                                      style: TextStyle(
-                                          fontSize: 23,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: suggestions
-                                          .map(
-                                            (s) => ActionChip(
-                                              label: Text(
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.lightbulb_outline,
+                                        color: TulaiColors.secondary,
+                                        size: 24,
+                                      ),
+                                      const SizedBox(width: TulaiSpacing.sm),
+                                      Text(
+                                        'Suggestions:',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                          color: TulaiColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: TulaiSpacing.md),
+                                  Wrap(
+                                    spacing: TulaiSpacing.sm,
+                                    runSpacing: TulaiSpacing.sm,
+                                    children: suggestions
+                                        .map(
+                                          (s) => InkWell(
+                                            onTap: () {
+                                              print('Selected suggestion: $s');
+                                              _answerController.text = s;
+                                              answers[currentKey] = s;
+                                              setState(() {});
+                                            },
+                                            borderRadius: BorderRadius.circular(
+                                                TulaiBorderRadius.lg),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: TulaiSpacing.lg,
+                                                vertical: TulaiSpacing.md,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [
+                                                    TulaiColors.secondary,
+                                                    TulaiColors.accent
+                                                  ],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        TulaiBorderRadius.lg),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: TulaiColors.secondary
+                                                        .withOpacity(0.3),
+                                                    blurRadius: 8,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Text(
                                                 s,
                                                 style: const TextStyle(
-                                                    fontSize: 25),
+                                                  fontSize: 18,
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                               ),
-                                              onPressed: () {
-                                                print(
-                                                    'Selected suggestion: $s');
-                                                _answerController.text = s;
-                                                answers[currentKey] = s;
-                                              },
                                             ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ],
-                                ),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ],
                               )
                             : Row(
                                 children: [
-                                  if (_errorText != "") ...[
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8),
-                                      child: Text(
-                                        _errorText,
-                                        style: const TextStyle(
-                                            color: Colors.red, fontSize: 18),
+                                  Icon(
+                                    _errorText.isNotEmpty
+                                        ? Icons.error_outline
+                                        : Icons.info_outline,
+                                    color: _errorText.isNotEmpty
+                                        ? TulaiColors.error
+                                        : TulaiColors.textMuted,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: TulaiSpacing.sm),
+                                  Expanded(
+                                    child: Text(
+                                      _errorText.isNotEmpty
+                                          ? _errorText
+                                          : 'No suggestions yet',
+                                      style: TextStyle(
+                                        color: _errorText.isNotEmpty
+                                            ? TulaiColors.error
+                                            : TulaiColors.textMuted,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                  ] else ...[
-                                    const Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 8),
-                                      child: Text(
-                                        'No suggestions yet',
-                                        style: TextStyle(
-                                            color: Colors.grey, fontSize: 23),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ],
                               ),
                       ),
-                      const Spacer(),
+                      SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.05),
+                      // Navigation buttons with improved styling
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          ElevatedButton(
-                            onPressed: _currentQuestionIndex == 0
-                                ? null
-                                : () {
-                                    setState(() {
-                                      suggestions = [];
-                                    });
-                                    _previousQuestion();
-                                  },
-                            child: const Text(
-                              'Previous',
-                              style: TextStyle(fontSize: 25),
+                          Expanded(
+                            child: Container(
+                              height: 50,
+                              margin:
+                                  const EdgeInsets.only(right: TulaiSpacing.sm),
+                              child: ElevatedButton(
+                                onPressed: _currentQuestionIndex == 0
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          suggestions = [];
+                                        });
+                                        _previousQuestion();
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      TulaiColors.backgroundPrimary,
+                                  foregroundColor: TulaiColors.primary,
+                                  side: BorderSide(
+                                    color: TulaiColors.primary,
+                                    width: 2,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        TulaiBorderRadius.lg),
+                                  ),
+                                  elevation: 0,
+                                  shadowColor: Colors.transparent,
+                                ),
+                                child: const Text(
+                                  'Previous',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xff40AD5F),
-                            ),
-                            onPressed: () async {
-                              if (_currentQuestionIndex ==
-                                  allQuestions.length - 1) {
-                                // Navigate to review screen
-                                final confirmed = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        EnrollmentReview(answers: answers),
-                                  ),
-                                );
+                          const SizedBox(width: TulaiSpacing.md),
+                          Expanded(
+                            child: Container(
+                              height: 50,
+                              margin:
+                                  const EdgeInsets.only(left: TulaiSpacing.sm),
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  if (_currentQuestionIndex ==
+                                      allQuestions.length - 1) {
+                                    // Navigate to review screen
+                                    final confirmed = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            EnrollmentReview(answers: answers),
+                                      ),
+                                    );
 
-                                if (confirmed == true) {
-                                  insertStudent();
-                                }
-                              } else {
-                                suggestions = [];
-                                _nextQuestion();
-                              }
-                            },
-                            child: Text(
-                              _currentQuestionIndex == allQuestions.length - 1
-                                  ? 'Submit'
-                                  : 'Next',
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 25),
+                                    if (confirmed == true) {
+                                      insertStudent();
+                                    }
+                                  } else {
+                                    suggestions = [];
+                                    _nextQuestion();
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: TulaiColors.secondary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        TulaiBorderRadius.lg),
+                                  ),
+                                  elevation: 8,
+                                  shadowColor:
+                                      TulaiColors.secondary.withOpacity(0.4),
+                                ),
+                                child: Text(
+                                  _currentQuestionIndex ==
+                                          allQuestions.length - 1
+                                      ? 'Submit'
+                                      : 'Next',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Question ${_currentQuestionIndex + 1} of ${allQuestions.length}',
-                        style: const TextStyle(color: Colors.grey),
+                      const SizedBox(height: TulaiSpacing.md),
+                      // Progress indicator with improved design
+                      Column(
+                        children: [
+                          Text(
+                            'Question ${_currentQuestionIndex + 1} of ${allQuestions.length}',
+                            style: TextStyle(
+                              color: TulaiColors.textMuted,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: TulaiSpacing.sm),
+                          Container(
+                            width: double.infinity,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: TulaiColors.borderLight,
+                              borderRadius:
+                                  BorderRadius.circular(TulaiBorderRadius.sm),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: (_currentQuestionIndex + 1) /
+                                  allQuestions.length,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      TulaiColors.primary,
+                                      TulaiColors.secondary
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                      TulaiBorderRadius.sm),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -56,7 +56,15 @@ If the input is clearly unrelated (like an address, date, or school name), respo
       return (jsonResponse).cast<String>();
     } else if (jsonResponse is Map && jsonResponse.containsKey("error")) {
       print("Model returned an error: ${jsonResponse["error"]}");
-      return [];
+      // Return the error message as a special suggestion that starts with "ERROR:"
+      String errorMsg = "";
+      if (jsonResponse["error"] is Map &&
+          jsonResponse["error"]["message"] != null) {
+        errorMsg = jsonResponse["error"]["message"];
+      } else {
+        errorMsg = jsonResponse["error"].toString();
+      }
+      return ["ERROR:$errorMsg"];
     } else {
       print("Unexpected JSON response format: $rawText");
       return [];
@@ -128,7 +136,15 @@ Assume common speech-to-text errors, such as:
       return (jsonResponse).cast<String>();
     } else if (jsonResponse is Map && jsonResponse.containsKey("error")) {
       print("Model returned an error: ${jsonResponse["error"]}");
-      return [];
+      // Return the error message as a special suggestion that starts with "ERROR:"
+      String errorMsg = "";
+      if (jsonResponse["error"] is Map &&
+          jsonResponse["error"]["message"] != null) {
+        errorMsg = jsonResponse["error"]["message"];
+      } else {
+        errorMsg = jsonResponse["error"].toString();
+      }
+      return ["ERROR:$errorMsg"];
     } else {
       print("Unexpected JSON response format: $rawText");
       return [];
@@ -193,7 +209,15 @@ Common speech-to-text mistakes:
       return (jsonResponse).cast<String>();
     } else if (jsonResponse is Map && jsonResponse.containsKey("error")) {
       print("Model returned an error: ${jsonResponse["error"]}");
-      return [];
+      // Return the error message as a special suggestion that starts with "ERROR:"
+      String errorMsg = "";
+      if (jsonResponse["error"] is Map &&
+          jsonResponse["error"]["message"] != null) {
+        errorMsg = jsonResponse["error"]["message"];
+      } else {
+        errorMsg = jsonResponse["error"].toString();
+      }
+      return ["ERROR:$errorMsg"];
     } else {
       print("Unexpected JSON response format: $rawText");
       return [];
@@ -266,7 +290,15 @@ Be strict but helpful. All answers should be plausible transcriptions or valid c
       return (jsonResponse).cast<String>();
     } else if (jsonResponse is Map && jsonResponse.containsKey("error")) {
       print("Model returned an error: ${jsonResponse["error"]}");
-      return [];
+      // Return the error message as a special suggestion that starts with "ERROR:"
+      String errorMsg = "";
+      if (jsonResponse["error"] is Map &&
+          jsonResponse["error"]["message"] != null) {
+        errorMsg = jsonResponse["error"]["message"];
+      } else {
+        errorMsg = jsonResponse["error"].toString();
+      }
+      return ["ERROR:$errorMsg"];
     } else {
       print("Unexpected JSON response format: $rawText");
       return [];
