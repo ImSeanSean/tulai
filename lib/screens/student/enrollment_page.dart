@@ -1,24 +1,259 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tulai/core/app_config.dart';
 import 'package:tulai/core/design_system.dart';
 import 'package:tulai/screens/student/enrollment_question.dart';
-import 'package:tulai/widgets/appbar.dart';
 
 class EnrollmentPage extends StatefulWidget {
-  const EnrollmentPage({super.key});
+  final VoidCallback? onBackToTeacherDashboard;
+
+  const EnrollmentPage({
+    super.key,
+    this.onBackToTeacherDashboard,
+  });
 
   @override
   State<EnrollmentPage> createState() => _EnrollmentPageState();
 }
 
 class _EnrollmentPageState extends State<EnrollmentPage> {
+  final _supabase = Supabase.instance.client;
+  final _passwordController = TextEditingController();
+  bool _isPasswordVisible = false;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _showPasswordDialog() async {
+    _passwordController.clear();
+    _isPasswordVisible = false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.lock_outline,
+                    color: TulaiColors.primary,
+                    size: 28,
+                  ),
+                  const SizedBox(width: TulaiSpacing.sm),
+                  Text(
+                    'Teacher Access Required',
+                    style: TulaiTextStyles.heading3,
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Please enter your teacher password to return to the dashboard.',
+                    style: TulaiTextStyles.bodyMedium.copyWith(
+                      color: TulaiColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: TulaiSpacing.lg),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: !_isPasswordVisible,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      hintText: 'Enter your password',
+                      prefixIcon: Icon(
+                        Icons.password,
+                        color: TulaiColors.primary,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _isPasswordVisible
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: TulaiColors.textSecondary,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isPasswordVisible = !_isPasswordVisible;
+                          });
+                        },
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(TulaiBorderRadius.md),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(TulaiBorderRadius.md),
+                        borderSide: BorderSide(
+                          color: TulaiColors.primary,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    onSubmitted: (_) => Navigator.of(context).pop(true),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(
+                    'Cancel',
+                    style: TulaiTextStyles.bodyMedium.copyWith(
+                      color: TulaiColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TulaiColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: TulaiSpacing.lg,
+                      vertical: TulaiSpacing.sm,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
+                    ),
+                  ),
+                  child: const Text('Verify'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == true && mounted) {
+      await _verifyPassword();
+    }
+  }
+
+  Future<void> _verifyPassword() async {
+    if (_passwordController.text.isEmpty) {
+      _showErrorSnackbar('Please enter your password');
+      return;
+    }
+
+    try {
+      // Show loading indicator
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+
+      // Get current user email
+      final user = _supabase.auth.currentUser;
+      if (user?.email == null) {
+        if (mounted) Navigator.of(context).pop(); // Close loading
+        _showErrorSnackbar('No user logged in');
+        return;
+      }
+
+      // Attempt to sign in with the provided password to verify it
+      await _supabase.auth.signInWithPassword(
+        email: user!.email!,
+        password: _passwordController.text,
+      );
+
+      // Password is correct
+      if (mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+
+        // Call the callback to go back to teacher dashboard
+        if (widget.onBackToTeacherDashboard != null) {
+          widget.onBackToTeacherDashboard!();
+        } else {
+          Navigator.of(context).pop(); // Fallback to regular pop
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: TulaiSpacing.sm),
+                const Text('Access granted'),
+              ],
+            ),
+            backgroundColor: TulaiColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        _showErrorSnackbar('Incorrect password. Please try again.');
+      }
+    }
+  }
+
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: TulaiSpacing.sm),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: TulaiColors.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLargeScreen = TulaiResponsive.isLargeScreen(context);
 
     return Scaffold(
       backgroundColor: TulaiColors.backgroundSecondary,
-      appBar: const CustomAppBar(),
+      appBar: AppBar(
+        backgroundColor: TulaiColors.primary,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: _showPasswordDialog,
+          tooltip: 'Back to Dashboard (Password Required)',
+        ),
+        title: Text(
+          'Student Enrollment',
+          style: TulaiTextStyles.heading3.copyWith(color: Colors.white),
+        ),
+        centerTitle: true,
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -36,30 +271,11 @@ class _EnrollmentPageState extends State<EnrollmentPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back button with design system styling
-              Container(
-                decoration: BoxDecoration(
-                  color: TulaiColors.backgroundPrimary,
-                  borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
-                  boxShadow: TulaiShadows.sm,
-                ),
-                child: IconButton(
-                  iconSize: 24,
-                  icon: Icon(
-                    Icons.arrow_back,
-                    color: TulaiColors.primary,
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ),
-
               // Dynamic spacer that adapts to screen size
               SizedBox(
                 height: isLargeScreen
                     ? MediaQuery.of(context).size.height * 0.05
-                    : TulaiSpacing.xxl,
+                    : TulaiSpacing.xl,
               ),
 
               // Welcome section with gradient card

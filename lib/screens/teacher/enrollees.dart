@@ -1,5 +1,10 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:path_provider/path_provider.dart';
+import 'package:tulai/utils/download_helper.dart';
 import 'package:tulai/core/design_system.dart';
 import 'package:tulai/screens/teacher/enrolee_information.dart';
 import 'package:tulai/services/student_db.dart';
@@ -102,6 +107,248 @@ class _EnrolleesState extends State<Enrollees> {
     }
   }
 
+  Future<void> _exportToExcel() async {
+    try {
+      // Show loading dialog
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(TulaiSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: TulaiSpacing.md),
+                  Text('Exporting to Excel...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Create Excel workbook
+      var excel = excel_lib.Excel.createExcel();
+      excel_lib.Sheet sheetObject = excel['Student Records'];
+
+      // Remove the default sheet that Excel.createExcel() creates
+      excel.delete('Sheet1');
+
+      // Define header row with styling
+      final headerStyle = excel_lib.CellStyle(
+        bold: true,
+        backgroundColorHex: excel_lib.ExcelColor.blue,
+        fontColorHex: excel_lib.ExcelColor.white,
+      );
+
+      // Add headers
+      final headers = [
+        'Last Name',
+        'First Name',
+        'Middle Name',
+        'Name Extension',
+        'Sex',
+        'Birthdate',
+        'Place of Birth',
+        'Civil Status',
+        'Religion',
+        'Ethnic Group',
+        'Mother Tongue',
+        'Contact Number',
+        'PWD',
+        'House/Street/Sitio',
+        'Barangay',
+        'Municipality/City',
+        'Province',
+        "Father's Last Name",
+        "Father's First Name",
+        "Father's Middle Name",
+        "Father's Occupation",
+        "Mother's Last Name",
+        "Mother's First Name",
+        "Mother's Middle Name",
+        "Mother's Occupation",
+        'Last School Attended',
+        'Last Grade Level Completed',
+        'Reason for Incomplete Schooling',
+        'Has Attended ALS',
+        'Date Enrolled',
+      ];
+
+      for (var i = 0; i < headers.length; i++) {
+        var cell = sheetObject.cell(
+            excel_lib.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        cell.value = excel_lib.TextCellValue(headers[i]);
+        cell.cellStyle = headerStyle;
+      }
+
+      // Add student data
+      for (var rowIndex = 0; rowIndex < filteredStudents.length; rowIndex++) {
+        final student = filteredStudents[rowIndex];
+        final dataRow = rowIndex + 1;
+
+        final rowData = [
+          student.lastName ?? 'N/A',
+          student.firstName ?? 'N/A',
+          student.middleName ?? 'N/A',
+          student.nameExtension ?? 'N/A',
+          student.sex ?? 'N/A',
+          student.birthdate != null
+              ? DateFormat('MM/dd/yyyy').format(student.birthdate!)
+              : 'N/A',
+          student.placeOfBirth ?? 'N/A',
+          student.civilStatus ?? 'N/A',
+          student.religion ?? 'N/A',
+          student.ethnicGroup ?? 'N/A',
+          student.motherTongue ?? 'N/A',
+          student.contactNumber ?? 'N/A',
+          student.isPWD == true ? 'Yes' : 'No',
+          student.houseStreetSitio ?? 'N/A',
+          student.barangay ?? 'N/A',
+          student.municipalityCity ?? 'N/A',
+          student.province ?? 'N/A',
+          student.fatherLastName ?? 'N/A',
+          student.fatherFirstName ?? 'N/A',
+          student.fatherMiddleName ?? 'N/A',
+          student.fatherOccupation ?? 'N/A',
+          student.motherLastName ?? 'N/A',
+          student.motherFirstName ?? 'N/A',
+          student.motherMiddleName ?? 'N/A',
+          student.motherOccupation ?? 'N/A',
+          student.lastSchoolAttended ?? 'N/A',
+          student.lastGradeLevelCompleted ?? 'N/A',
+          student.reasonForIncompleteSchooling ?? 'N/A',
+          student.hasAttendedALS == true ? 'Yes' : 'No',
+          student.created_at != null
+              ? DateFormat('MM/dd/yyyy').format(student.created_at!)
+              : 'N/A',
+        ];
+
+        for (var colIndex = 0; colIndex < rowData.length; colIndex++) {
+          var cell = sheetObject.cell(excel_lib.CellIndex.indexByColumnRow(
+              columnIndex: colIndex, rowIndex: dataRow));
+          // Replace empty strings with N/A
+          final cellValue =
+              rowData[colIndex].trim().isEmpty ? 'N/A' : rowData[colIndex];
+          cell.value = excel_lib.TextCellValue(cellValue);
+        }
+      }
+
+      // Auto-size columns (set reasonable widths)
+      for (var i = 0; i < headers.length; i++) {
+        sheetObject.setColumnWidth(i, 20);
+      }
+
+      // Save file
+      final fileBytes = excel.encode();
+
+      if (fileBytes != null) {
+        if (kIsWeb) {
+          // For web, use helper to trigger browser download
+          try {
+            final timestamp =
+                DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+            final filename = 'student_records_$timestamp.xlsx';
+            await downloadBytes(fileBytes, filename);
+
+            if (mounted) {
+              Navigator.pop(context); // Close loading dialog
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Exported ${filteredStudents.length} records as $filename'),
+                  backgroundColor: TulaiColors.success,
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              Navigator.pop(context); // Close loading dialog
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error exporting on web: $e'),
+                  backgroundColor: TulaiColors.error,
+                ),
+              );
+            }
+          }
+        } else {
+          // For mobile/desktop
+          final directory = await getApplicationDocumentsDirectory();
+          final timestamp =
+              DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+          final filePath = '${directory.path}/student_records_$timestamp.xlsx';
+
+          File(filePath)
+            ..createSync(recursive: true)
+            ..writeAsBytesSync(fileBytes);
+
+          if (mounted) {
+            Navigator.pop(context); // Close loading dialog
+
+            // Show success dialog with file location
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: TulaiColors.success),
+                    const SizedBox(width: TulaiSpacing.sm),
+                    const Text('Export Successful'),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        'Exported ${filteredStudents.length} student records to:'),
+                    const SizedBox(height: TulaiSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.all(TulaiSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: TulaiColors.backgroundSecondary,
+                        borderRadius:
+                            BorderRadius.circular(TulaiBorderRadius.sm),
+                      ),
+                      child: SelectableText(
+                        filePath,
+                        style: TulaiTextStyles.bodySmall.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting: $e'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+      debugPrint('Export error: $e');
+    }
+  }
+
   void _toggleSortMode() {
     setState(() {
       currentSortMode = currentSortMode == SortMode.alphabetical
@@ -117,7 +364,7 @@ class _EnrolleesState extends State<Enrollees> {
   Widget _buildSearchAndFilter() {
     return Container(
       padding: const EdgeInsets.all(TulaiSpacing.lg),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: TulaiColors.backgroundPrimary,
         boxShadow: TulaiShadows.sm,
       ),
@@ -130,7 +377,7 @@ class _EnrolleesState extends State<Enrollees> {
                 child: TulaiTextField(
                   controller: searchController,
                   hint: 'Search enrollees by name...',
-                  prefixIcon: Icon(
+                  prefixIcon: const Icon(
                     Icons.search,
                     color: TulaiColors.primary,
                     size: 24,
@@ -182,6 +429,20 @@ class _EnrolleesState extends State<Enrollees> {
                   ),
                 ),
               ),
+              const SizedBox(width: TulaiSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: filteredStudents.isEmpty ? null : _exportToExcel,
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Export'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: TulaiSpacing.md,
+                    vertical: TulaiSpacing.xs,
+                  ),
+                  side: BorderSide(color: TulaiColors.primary.withOpacity(0.5)),
+                  foregroundColor: TulaiColors.primary,
+                ),
+              ),
               const Spacer(),
               Text(
                 'Sorted ${currentSortMode == SortMode.alphabetical ? 'alphabetically' : 'by date'}',
@@ -211,13 +472,18 @@ class _EnrolleesState extends State<Enrollees> {
         horizontal: TulaiSpacing.lg,
         vertical: TulaiSpacing.xs,
       ),
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        final deleted = await Navigator.push<bool>(
           context,
           MaterialPageRoute(
             builder: (_) => EnrolleeInformation(student: student),
           ),
         );
+
+        // If student was deleted, refresh the list
+        if (deleted == true) {
+          fetchStudents();
+        }
       },
       child: Row(
         children: [
@@ -286,7 +552,7 @@ class _EnrolleesState extends State<Enrollees> {
             ),
           ),
           // Chevron icon
-          Icon(
+          const Icon(
             Icons.chevron_right,
             color: TulaiColors.textMuted,
             size: 24,
@@ -339,7 +605,7 @@ class _EnrolleesState extends State<Enrollees> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.people_outline,
             size: 80,
             color: TulaiColors.textMuted,
@@ -389,11 +655,17 @@ class _EnrolleesState extends State<Enrollees> {
         automaticallyImplyLeading: false,
         elevation: 0,
         backgroundColor: TulaiColors.backgroundPrimary,
-        title: Text(
+        title: const Text(
           'Enrollees',
           style: TulaiTextStyles.heading2,
         ),
         actions: [
+          // Export button
+          IconButton(
+            icon: const Icon(Icons.download, color: TulaiColors.primary),
+            tooltip: 'Export to Excel',
+            onPressed: filteredStudents.isEmpty ? null : _exportToExcel,
+          ),
           if (isLargeScreen)
             Padding(
               padding: const EdgeInsets.only(right: TulaiSpacing.md),
@@ -419,7 +691,7 @@ class _EnrolleesState extends State<Enrollees> {
         ],
       ),
       body: isLoading
-          ? Center(
+          ? const Center(
               child: CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(TulaiColors.primary),
               ),

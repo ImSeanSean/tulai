@@ -1,21 +1,363 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tulai/core/design_system.dart';
 import 'package:tulai/services/student_db.dart';
+import 'package:tulai/screens/teacher/edit_student.dart';
+import 'package:tulai/services/student_export_service.dart';
 
-class EnrolleeInformation extends StatelessWidget {
+class EnrolleeInformation extends StatefulWidget {
   final Student student;
 
   const EnrolleeInformation({super.key, required this.student});
 
+  @override
+  State<EnrolleeInformation> createState() => _EnrolleeInformationState();
+}
+
+class _EnrolleeInformationState extends State<EnrolleeInformation> {
+  final _supabase = Supabase.instance.client;
+  late Student _student;
+  bool _isEditing = false;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _student = widget.student;
+  }
+
   String getFullName() {
     final parts = [
-      student.firstName,
-      student.middleName,
-      student.lastName,
-      student.nameExtension,
+      _student.firstName,
+      _student.middleName,
+      _student.lastName,
+      _student.nameExtension,
     ].where((part) => part != null && part.isNotEmpty).toList();
     return parts.join(' ');
+  }
+
+  Future<void> _deleteStudent() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: TulaiColors.error),
+            SizedBox(width: TulaiSpacing.sm),
+            Text('Delete Student'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete ${getFullName()}? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: TulaiColors.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (_student.id == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot delete: Student ID not found'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+        return;
+      }
+
+      try {
+        await _supabase.from('students').delete().eq('id', _student.id!);
+
+        if (mounted) {
+          Navigator.pop(context, true); // Return true to indicate deletion
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${getFullName()} deleted successfully'),
+              backgroundColor: TulaiColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting student: $e'),
+              backgroundColor: TulaiColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _editStudent() async {
+    final updatedStudent = await Navigator.push<Student>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditStudent(student: _student),
+      ),
+    );
+
+    // If student was updated, refresh the data
+    if (updatedStudent != null) {
+      setState(() {
+        _student = updatedStudent;
+      });
+    }
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _isEditing = false;
+      _student = widget.student; // Revert changes
+    });
+  }
+
+  Future<void> _saveChanges() async {
+    if (_student.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot save: Student ID not found'),
+          backgroundColor: TulaiColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await _supabase
+          .from('students')
+          .update(_student.toMap())
+          .eq('id', _student.id!);
+
+      if (mounted) {
+        setState(() {
+          _isEditing = false;
+          _isSaving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Student information updated successfully'),
+            backgroundColor: TulaiColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating student: $e'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportAsExcel() async {
+    try {
+      // Show loading
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(TulaiSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: TulaiSpacing.md),
+                  Text('Exporting to Excel...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final result = await StudentExportService.exportStudentToExcel(_student);
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported successfully: ${result.split('/').last}'),
+            backgroundColor: TulaiColors.success,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportAsPdf() async {
+    try {
+      // Show loading
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(TulaiSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: TulaiSpacing.md),
+                  Text('Exporting to PDF...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final result = await StudentExportService.exportStudentToPdf(_student);
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported successfully: ${result.split('/').last}'),
+            backgroundColor: TulaiColors.success,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _previewPdf() async {
+    try {
+      await StudentExportService.previewStudentPdf(_student);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Preview failed: $e'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showMoreOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(TulaiBorderRadius.lg)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(TulaiSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit, color: TulaiColors.primary),
+              title: const Text('Edit Student Information'),
+              onTap: () {
+                Navigator.pop(context);
+                _editStudent();
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.file_download, color: TulaiColors.secondary),
+              title: const Text('Export as Excel'),
+              subtitle: const Text('Download student data as spreadsheet'),
+              onTap: () {
+                Navigator.pop(context);
+                _exportAsExcel();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf,
+                  color: TulaiColors.secondary),
+              title: const Text('Export as PDF'),
+              subtitle: const Text('Download student data as PDF'),
+              onTap: () {
+                Navigator.pop(context);
+                _exportAsPdf();
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.print, color: TulaiColors.textSecondary),
+              title: const Text('Print Preview'),
+              subtitle: const Text('Preview and print student information'),
+              onTap: () {
+                Navigator.pop(context);
+                _previewPdf();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.delete, color: TulaiColors.error),
+              title: const Text('Delete Student'),
+              onTap: () {
+                Navigator.pop(context);
+                _deleteStudent();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String formatDate(DateTime? date) {
@@ -24,15 +366,26 @@ class EnrolleeInformation extends StatelessWidget {
   }
 
   Widget buildInfoRow(String label, String? value, BuildContext context) {
+    final isLargeScreen = TulaiResponsive.isLargeScreen(context);
+
     return Container(
       width: TulaiResponsive.responsive<double>(
         context: context,
         mobile: double.infinity,
-        tablet: 300,
-        desktop: 250,
+        tablet: 240,
+        desktop: 220,
       ),
-      margin: const EdgeInsets.symmetric(vertical: TulaiSpacing.xs),
-      padding: const EdgeInsets.all(TulaiSpacing.md),
+      margin: EdgeInsets.symmetric(
+        vertical: isLargeScreen ? TulaiSpacing.xs / 2 : TulaiSpacing.xs,
+      ),
+      padding: isLargeScreen
+          ? const EdgeInsets.fromLTRB(
+              TulaiSpacing.sm,
+              TulaiSpacing.sm,
+              TulaiSpacing.sm,
+              TulaiSpacing.xs, // Less padding at bottom
+            )
+          : const EdgeInsets.all(TulaiSpacing.md),
       decoration: BoxDecoration(
         color: TulaiColors.backgroundPrimary,
         border: Border.all(color: TulaiColors.borderLight, width: 1),
@@ -44,14 +397,20 @@ class EnrolleeInformation extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TulaiTextStyles.labelLarge.copyWith(
+            style: (isLargeScreen
+                    ? TulaiTextStyles.labelMedium
+                    : TulaiTextStyles.labelLarge)
+                .copyWith(
               color: TulaiColors.textSecondary,
             ),
           ),
-          const SizedBox(height: TulaiSpacing.sm),
+          SizedBox(height: isLargeScreen ? 4 : TulaiSpacing.xs),
           Text(
             value?.isNotEmpty == true ? value! : 'N/A',
-            style: TulaiTextStyles.bodyLarge.copyWith(
+            style: (isLargeScreen
+                    ? TulaiTextStyles.bodyMedium
+                    : TulaiTextStyles.bodyLarge)
+                .copyWith(
               color: value?.isNotEmpty == true
                   ? TulaiColors.textPrimary
                   : TulaiColors.textMuted,
@@ -75,13 +434,55 @@ class EnrolleeInformation extends StatelessWidget {
         backgroundColor: TulaiColors.backgroundPrimary,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: TulaiColors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: Icon(
+            _isEditing ? Icons.close : Icons.arrow_back,
+            color: TulaiColors.textPrimary,
+          ),
+          onPressed:
+              _isEditing ? _cancelEdit : () => Navigator.of(context).pop(),
         ),
         title: Text(
-          'Student Information',
+          _isEditing ? 'Edit Student' : 'Student Information',
           style: TulaiTextStyles.heading3,
         ),
+        actions: _isEditing
+            ? [
+                if (_isSaving)
+                  const Padding(
+                    padding: EdgeInsets.all(TulaiSpacing.md),
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  TextButton(
+                    onPressed: _saveChanges,
+                    child: Text(
+                      'SAVE',
+                      style: TulaiTextStyles.bodyLarge.copyWith(
+                        color: TulaiColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: TulaiSpacing.sm),
+              ]
+            : [
+                IconButton(
+                  icon: const Icon(Icons.edit, color: TulaiColors.primary),
+                  tooltip: 'Edit Student',
+                  onPressed: _editStudent,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.more_vert,
+                      color: TulaiColors.textPrimary),
+                  tooltip: 'More Options',
+                  onPressed: _showMoreOptions,
+                ),
+                const SizedBox(width: TulaiSpacing.sm),
+              ],
       ),
       body: SingleChildScrollView(
         padding:
@@ -91,12 +492,15 @@ class EnrolleeInformation extends StatelessWidget {
           children: [
             // Header with student name and avatar
             TulaiCard(
-              margin: const EdgeInsets.only(bottom: TulaiSpacing.lg),
+              margin: EdgeInsets.only(
+                  bottom: isLargeScreen ? TulaiSpacing.md : TulaiSpacing.lg),
+              padding: EdgeInsets.all(
+                  isLargeScreen ? TulaiSpacing.md : TulaiSpacing.lg),
               child: Row(
                 children: [
                   Container(
-                    width: 80,
-                    height: 80,
+                    width: isLargeScreen ? 60 : 80,
+                    height: isLargeScreen ? 60 : 80,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [TulaiColors.primary, TulaiColors.secondary],
@@ -109,36 +513,50 @@ class EnrolleeInformation extends StatelessWidget {
                     child: Center(
                       child: Text(
                         _getInitials(displayName),
-                        style: TulaiTextStyles.heading2.copyWith(
+                        style: (isLargeScreen
+                                ? TulaiTextStyles.heading3
+                                : TulaiTextStyles.heading2)
+                            .copyWith(
                           color: Colors.white,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: TulaiSpacing.lg),
+                  SizedBox(
+                      width: isLargeScreen ? TulaiSpacing.md : TulaiSpacing.lg),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           displayName,
-                          style: TulaiTextStyles.heading2,
+                          style: (isLargeScreen
+                              ? TulaiTextStyles.heading3
+                              : TulaiTextStyles.heading2),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: TulaiSpacing.xs),
-                        if (student.municipalityCity != null)
+                        SizedBox(height: isLargeScreen ? 4 : TulaiSpacing.xs),
+                        if (_student.municipalityCity != null)
                           Text(
-                            student.municipalityCity!,
-                            style: TulaiTextStyles.bodyMedium.copyWith(
+                            _student.municipalityCity!,
+                            style: (isLargeScreen
+                                    ? TulaiTextStyles.bodyMedium
+                                    : TulaiTextStyles.bodyLarge)
+                                .copyWith(
                               color: TulaiColors.textSecondary,
                             ),
                           ),
-                        const SizedBox(height: TulaiSpacing.sm),
+                        SizedBox(
+                            height: isLargeScreen
+                                ? TulaiSpacing.xs
+                                : TulaiSpacing.sm),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: TulaiSpacing.md,
-                            vertical: TulaiSpacing.xs,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isLargeScreen
+                                ? TulaiSpacing.sm
+                                : TulaiSpacing.md,
+                            vertical: isLargeScreen ? 4 : TulaiSpacing.xs,
                           ),
                           decoration: BoxDecoration(
                             color: TulaiColors.success.withOpacity(0.1),
@@ -149,8 +567,11 @@ class EnrolleeInformation extends StatelessWidget {
                             ),
                           ),
                           child: Text(
-                            'Enrolled ${student.created_at != null ? _getRelativeTime(student.created_at!) : 'Recently'}',
-                            style: TulaiTextStyles.labelSmall.copyWith(
+                            'Enrolled ${_student.created_at != null ? _getRelativeTime(_student.created_at!) : 'Recently'}',
+                            style: (isLargeScreen
+                                    ? TulaiTextStyles.labelSmall
+                                    : TulaiTextStyles.labelSmall)
+                                .copyWith(
                               color: TulaiColors.success,
                               fontWeight: FontWeight.w600,
                             ),
@@ -168,10 +589,10 @@ class EnrolleeInformation extends StatelessWidget {
               context,
               'Personal Information',
               [
-                buildInfoRow("Last Name", student.lastName, context),
-                buildInfoRow("First Name", student.firstName, context),
-                buildInfoRow("Middle Name", student.middleName, context),
-                buildInfoRow("Name Extension", student.nameExtension, context),
+                buildInfoRow("Last Name", _student.lastName, context),
+                buildInfoRow("First Name", _student.firstName, context),
+                buildInfoRow("Middle Name", _student.middleName, context),
+                buildInfoRow("Name Extension", _student.nameExtension, context),
               ],
             ),
 
@@ -181,11 +602,11 @@ class EnrolleeInformation extends StatelessWidget {
               'Address',
               [
                 buildInfoRow(
-                    "House/Street/Sitio", student.houseStreetSitio, context),
-                buildInfoRow("Barangay", student.barangay, context),
+                    "House/Street/Sitio", _student.houseStreetSitio, context),
+                buildInfoRow("Barangay", _student.barangay, context),
                 buildInfoRow(
-                    "Municipality/City", student.municipalityCity, context),
-                buildInfoRow("Province", student.province, context),
+                    "Municipality/City", _student.municipalityCity, context),
+                buildInfoRow("Province", _student.province, context),
               ],
             ),
 
@@ -194,17 +615,17 @@ class EnrolleeInformation extends StatelessWidget {
               context,
               'Other Information',
               [
-                buildInfoRow("Sex", student.sex, context),
+                buildInfoRow("Sex", _student.sex, context),
                 buildInfoRow(
-                    "Birthdate", formatDate(student.birthdate), context),
-                buildInfoRow("Place of Birth", student.placeOfBirth, context),
-                buildInfoRow("Civil Status", student.civilStatus, context),
-                buildInfoRow("Religion", student.religion, context),
-                buildInfoRow("Ethnic Group", student.ethnicGroup, context),
-                buildInfoRow("Mother Tongue", student.motherTongue, context),
-                buildInfoRow("Contact Number", student.contactNumber, context),
+                    "Birthdate", formatDate(_student.birthdate), context),
+                buildInfoRow("Place of Birth", _student.placeOfBirth, context),
+                buildInfoRow("Civil Status", _student.civilStatus, context),
+                buildInfoRow("Religion", _student.religion, context),
+                buildInfoRow("Ethnic Group", _student.ethnicGroup, context),
+                buildInfoRow("Mother Tongue", _student.motherTongue, context),
+                buildInfoRow("Contact Number", _student.contactNumber, context),
                 buildInfoRow(
-                    "PWD", student.isPWD == true ? "Yes" : "No", context),
+                    "PWD", _student.isPWD == true ? "Yes" : "No", context),
               ],
             ),
 
@@ -214,21 +635,21 @@ class EnrolleeInformation extends StatelessWidget {
               "Parents' Information",
               [
                 buildInfoRow(
-                    "Father's Last Name", student.fatherLastName, context),
+                    "Father's Last Name", _student.fatherLastName, context),
                 buildInfoRow(
-                    "Father's First Name", student.fatherFirstName, context),
+                    "Father's First Name", _student.fatherFirstName, context),
                 buildInfoRow(
-                    "Father's Middle Name", student.fatherMiddleName, context),
+                    "Father's Middle Name", _student.fatherMiddleName, context),
                 buildInfoRow(
-                    "Father's Occupation", student.fatherOccupation, context),
+                    "Father's Occupation", _student.fatherOccupation, context),
                 buildInfoRow(
-                    "Mother's Last Name", student.motherLastName, context),
+                    "Mother's Last Name", _student.motherLastName, context),
                 buildInfoRow(
-                    "Mother's First Name", student.motherFirstName, context),
+                    "Mother's First Name", _student.motherFirstName, context),
                 buildInfoRow(
-                    "Mother's Middle Name", student.motherMiddleName, context),
+                    "Mother's Middle Name", _student.motherMiddleName, context),
                 buildInfoRow(
-                    "Mother's Occupation", student.motherOccupation, context),
+                    "Mother's Occupation", _student.motherOccupation, context),
               ],
             ),
 
@@ -237,14 +658,14 @@ class EnrolleeInformation extends StatelessWidget {
               context,
               'Educational Background',
               [
-                buildInfoRow("Last School Attended", student.lastSchoolAttended,
-                    context),
+                buildInfoRow("Last School Attended",
+                    _student.lastSchoolAttended, context),
                 buildInfoRow("Last Grade Level Completed",
-                    student.lastGradeLevelCompleted, context),
+                    _student.lastGradeLevelCompleted, context),
                 buildInfoRow("Reason for Incomplete Schooling",
-                    student.reasonForIncompleteSchooling, context),
+                    _student.reasonForIncompleteSchooling, context),
                 buildInfoRow("Attended ALS Before",
-                    student.hasAttendedALS == true ? "Yes" : "No", context),
+                    _student.hasAttendedALS == true ? "Yes" : "No", context),
               ],
             ),
           ],
@@ -259,7 +680,9 @@ class EnrolleeInformation extends StatelessWidget {
     final isLargeScreen = TulaiResponsive.isLargeScreen(context);
 
     return TulaiCard(
-      margin: const EdgeInsets.only(bottom: TulaiSpacing.lg),
+      margin: EdgeInsets.only(
+          bottom: isLargeScreen ? TulaiSpacing.md : TulaiSpacing.lg),
+      padding: isLargeScreen ? const EdgeInsets.all(TulaiSpacing.lg) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -267,18 +690,19 @@ class EnrolleeInformation extends StatelessWidget {
             title,
             style: TulaiTextStyles.heading3.copyWith(
               color: TulaiColors.primary,
+              fontSize: isLargeScreen ? 18 : null,
             ),
           ),
-          const SizedBox(height: TulaiSpacing.md),
+          SizedBox(height: isLargeScreen ? TulaiSpacing.sm : TulaiSpacing.md),
           if (isLargeScreen)
-            // Grid layout for larger screens
+            // Grid layout for larger screens - more columns for compact view
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 3,
-              crossAxisSpacing: TulaiSpacing.md,
-              mainAxisSpacing: TulaiSpacing.md,
-              childAspectRatio: 2.5,
+              crossAxisCount: 4,
+              crossAxisSpacing: TulaiSpacing.sm,
+              mainAxisSpacing: TulaiSpacing.sm,
+              childAspectRatio: 2.2,
               children: children,
             )
           else

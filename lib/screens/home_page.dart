@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tulai/core/design_system.dart';
 import 'package:tulai/screens/teacher/enrollees.dart';
 import 'package:tulai/screens/teacher/settings.dart';
+import 'package:tulai/screens/student/enrollment_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,6 +23,12 @@ class _HomePageState extends State<HomePage> {
       description: 'View and manage student enrollments',
     ),
     NavigationItem(
+      icon: Icons.person_add_outlined,
+      selectedIcon: Icons.person_add,
+      label: 'New Enrollment',
+      description: 'Enroll a new student',
+    ),
+    NavigationItem(
       icon: Icons.settings_outlined,
       selectedIcon: Icons.settings,
       label: 'Settings',
@@ -34,6 +41,14 @@ class _HomePageState extends State<HomePage> {
       case 0:
         return const Enrollees();
       case 1:
+        return EnrollmentPage(
+          onBackToTeacherDashboard: () {
+            setState(() {
+              selectedIndex = 0; // Return to Enrollees page
+            });
+          },
+        );
+      case 2:
         return const TeacherSettings();
       default:
         return _buildWelcomeScreen();
@@ -71,6 +86,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final isLargeScreen = TulaiResponsive.isLargeScreen(context);
     final sidebarWidth = isSidebarExpanded ? 280.0 : 72.0;
+    final isEnrollmentPage =
+        selectedIndex == 1; // Hide sidebar when enrollment is open
 
     if (isLargeScreen) {
       // Desktop/tablet layout with collapsible sidebar
@@ -78,32 +95,34 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: TulaiColors.backgroundSecondary,
         body: Row(
           children: [
-            // Collapsible sidebar navigation
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              width: sidebarWidth,
-              decoration: BoxDecoration(
-                color: TulaiColors.backgroundPrimary,
-                boxShadow: TulaiShadows.md,
-              ),
-              child: Column(
-                children: [
-                  // Header with logos
-                  _buildSidebarHeader(),
-                  // Navigation items
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(TulaiSpacing.md),
-                      itemCount: navigationItems.length,
-                      itemBuilder: (context, index) {
-                        return _buildSidebarItem(navigationItems[index], index);
-                      },
+            // Collapsible sidebar navigation - hide when enrollment is open
+            if (!isEnrollmentPage)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                width: sidebarWidth,
+                decoration: BoxDecoration(
+                  color: TulaiColors.backgroundPrimary,
+                  boxShadow: TulaiShadows.md,
+                ),
+                child: Column(
+                  children: [
+                    // Header with logos
+                    _buildSidebarHeader(),
+                    // Navigation items
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(TulaiSpacing.md),
+                        itemCount: navigationItems.length,
+                        itemBuilder: (context, index) {
+                          return _buildSidebarItem(
+                              navigationItems[index], index);
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
             // Main content area
             Expanded(
               child: _getBody(),
@@ -112,12 +131,12 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     } else {
-      // Mobile layout with bottom navigation
+      // Mobile layout with bottom navigation - hide bottom nav when enrollment is open
       return Scaffold(
         backgroundColor: TulaiColors.backgroundSecondary,
-        appBar: _buildMobileAppBar(),
+        appBar: isEnrollmentPage ? null : _buildMobileAppBar(),
         body: _getBody(),
-        bottomNavigationBar: _buildBottomNavigation(),
+        bottomNavigationBar: isEnrollmentPage ? null : _buildBottomNavigation(),
       );
     }
   }

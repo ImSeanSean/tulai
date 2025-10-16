@@ -1,11 +1,17 @@
 // ignore_for_file: avoid_print
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+// Create model with web-compatible API key loading
 final model = GenerativeModel(
-    model: "gemini-2.0-flash", apiKey: dotenv.env['GEMINI_API_KEY']!);
+    model: "gemini-2.0-flash",
+    apiKey: kIsWeb
+        ? 'AIzaSyDlC9p4Bn4-EmdNk3tUU_3glQY8fT2TFMw' // Hardcoded for web
+        : dotenv.env['GEMINI_API_KEY']! // From .env for mobile/desktop
+    );
 
 //Response for Form Inputs
 Future<List<String>> handleNameField(String question, String userAnswer) async {

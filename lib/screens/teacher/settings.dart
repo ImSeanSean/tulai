@@ -1,13 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tulai/core/app_config.dart';
 import 'package:tulai/core/design_system.dart';
 
-class TeacherSettings extends StatelessWidget {
+class TeacherSettings extends StatefulWidget {
   const TeacherSettings({super.key});
+
+  @override
+  State<TeacherSettings> createState() => _TeacherSettingsState();
+}
+
+class _TeacherSettingsState extends State<TeacherSettings> {
+  final _supabase = Supabase.instance.client;
+  Map<String, dynamic>? _userInfo;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+  }
+
+  Future<void> _loadUserInfo() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final response =
+            await _supabase.from('users').select().eq('id', user.id).single();
+
+        setState(() {
+          _userInfo = response;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: TulaiSpacing.sm),
+                Text('Error loading user info: $e'),
+              ],
+            ),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isLargeScreen = TulaiResponsive.isLargeScreen(context);
+    final user = _supabase.auth.currentUser;
 
     return Scaffold(
       backgroundColor: TulaiColors.backgroundSecondary,
@@ -20,49 +70,193 @@ class TeacherSettings extends StatelessWidget {
           style: TulaiTextStyles.heading2,
         ),
       ),
-      body: SingleChildScrollView(
-        padding:
-            EdgeInsets.all(isLargeScreen ? TulaiSpacing.xl : TulaiSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Profile Section
-            TulaiCard(
-              margin: const EdgeInsets.only(bottom: TulaiSpacing.lg),
-              child: Row(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: EdgeInsets.all(
+                  isLargeScreen ? TulaiSpacing.xl : TulaiSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [TulaiColors.primary, TulaiColors.secondary],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius:
-                          BorderRadius.circular(TulaiBorderRadius.round),
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      color: Colors.white,
-                      size: 32,
+                  // Profile Header
+                  TulaiCard(
+                    margin: const EdgeInsets.only(bottom: TulaiSpacing.lg),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                TulaiColors.primary,
+                                TulaiColors.secondary
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius:
+                                BorderRadius.circular(TulaiBorderRadius.round),
+                          ),
+                          child: const Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 40,
+                          ),
+                        ),
+                        const SizedBox(width: TulaiSpacing.lg),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _userInfo?['name'] ?? 'Teacher',
+                                style: TulaiTextStyles.heading2,
+                              ),
+                              const SizedBox(height: TulaiSpacing.xs),
+                              Text(
+                                user?.email ?? 'No email',
+                                style: TulaiTextStyles.bodyMedium.copyWith(
+                                  color: TulaiColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: TulaiSpacing.xs),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: TulaiSpacing.sm,
+                                  vertical: TulaiSpacing.xs,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: TulaiColors.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(
+                                      TulaiBorderRadius.sm),
+                                ),
+                                child: Text(
+                                  _userInfo?['role']?.toUpperCase() ??
+                                      'TEACHER',
+                                  style: TulaiTextStyles.bodySmall.copyWith(
+                                    color: TulaiColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: TulaiSpacing.lg),
-                  Expanded(
+
+                  // Account Information Section
+                  TulaiCard(
+                    margin: const EdgeInsets.only(bottom: TulaiSpacing.lg),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Teacher Account',
-                          style: TulaiTextStyles.heading3,
+                          'Account Information',
+                          style: TulaiTextStyles.heading3.copyWith(
+                            color: TulaiColors.primary,
+                          ),
                         ),
-                        const SizedBox(height: TulaiSpacing.xs),
+                        const SizedBox(height: TulaiSpacing.md),
+                        _buildInfoRow(
+                          icon: Icons.badge_outlined,
+                          label: 'User ID',
+                          value: _userInfo?['id']?.toString().substring(0, 8) ??
+                              'N/A',
+                        ),
+                        const Divider(height: TulaiSpacing.lg),
+                        _buildInfoRow(
+                          icon: Icons.email_outlined,
+                          label: 'Email Address',
+                          value: user?.email ?? 'N/A',
+                        ),
+                        const Divider(height: TulaiSpacing.lg),
+                        _buildInfoRow(
+                          icon: Icons.person_outline,
+                          label: 'Full Name',
+                          value: _userInfo?['name'] ?? 'N/A',
+                        ),
+                        const Divider(height: TulaiSpacing.lg),
+                        _buildInfoRow(
+                          icon: Icons.work_outline,
+                          label: 'Role',
+                          value: _userInfo?['role']?.toUpperCase() ?? 'TEACHER',
+                        ),
+                        const Divider(height: TulaiSpacing.lg),
+                        _buildInfoRow(
+                          icon: Icons.calendar_today_outlined,
+                          label: 'Account Created',
+                          value: user?.createdAt ?? 'N/A',
+                        ),
+                        const SizedBox(height: TulaiSpacing.md),
+                        Container(
+                          padding: const EdgeInsets.all(TulaiSpacing.md),
+                          decoration: BoxDecoration(
+                            color: TulaiColors.info.withOpacity(0.1),
+                            borderRadius:
+                                BorderRadius.circular(TulaiBorderRadius.md),
+                            border: Border.all(
+                              color: TulaiColors.info.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: TulaiColors.info,
+                                size: 20,
+                              ),
+                              const SizedBox(width: TulaiSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  'Only administrators can edit account information. Please contact your admin for any changes.',
+                                  style: TulaiTextStyles.bodySmall.copyWith(
+                                    color: TulaiColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Logout Button
+                  TulaiCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          'Manage your account settings and preferences',
-                          style: TulaiTextStyles.bodyMedium.copyWith(
-                            color: TulaiColors.textSecondary,
+                          'Session',
+                          style: TulaiTextStyles.heading3.copyWith(
+                            color: TulaiColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: TulaiSpacing.md),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _showLogoutDialog(context);
+                            },
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Logout'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: TulaiColors.error,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: TulaiSpacing.lg,
+                                horizontal: TulaiSpacing.xl,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(TulaiBorderRadius.md),
+                              ),
+                              elevation: 0,
+                            ),
                           ),
                         ),
                       ],
@@ -71,179 +265,51 @@ class TeacherSettings extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Settings Sections
-            _buildSettingsSection(
-              context,
-              'Account',
-              [
-                _buildSettingsItem(
-                  context,
-                  icon: Icons.person_outline,
-                  title: 'Profile Information',
-                  subtitle: 'View and edit your profile details',
-                  onTap: () {
-                    // TODO: Navigate to profile page
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Profile page coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildSettingsItem(
-                  context,
-                  icon: Icons.notifications_outlined,
-                  title: 'Notifications',
-                  subtitle: 'Manage notification preferences',
-                  onTap: () {
-                    // TODO: Navigate to notifications settings
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Notification settings coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-
-            _buildSettingsSection(
-              context,
-              'Application',
-              [
-                _buildSettingsItem(
-                  context,
-                  icon: Icons.help_outline,
-                  title: 'Help & Support',
-                  subtitle: 'Get help and contact support',
-                  onTap: () {
-                    _showHelpDialog(context);
-                  },
-                ),
-                _buildSettingsItem(
-                  context,
-                  icon: Icons.info_outline,
-                  title: 'About',
-                  subtitle: 'Learn more about Tulai ALS System',
-                  onTap: () {
-                    _showAboutDialog(context);
-                  },
-                ),
-              ],
-            ),
-
-            _buildSettingsSection(
-              context,
-              'Session',
-              [
-                _buildSettingsItem(
-                  context,
-                  icon: Icons.logout,
-                  title: 'Logout',
-                  subtitle: 'Sign out of your account',
-                  iconColor: TulaiColors.error,
-                  titleColor: TulaiColors.error,
-                  onTap: () {
-                    _showLogoutDialog(context);
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildSettingsSection(
-      BuildContext context, String title, List<Widget> items) {
-    return TulaiCard(
-      margin: const EdgeInsets.only(bottom: TulaiSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TulaiTextStyles.heading3.copyWith(
-              color: TulaiColors.primary,
-            ),
-          ),
-          const SizedBox(height: TulaiSpacing.md),
-          ...items,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsItem(
-    BuildContext context, {
+  Widget _buildInfoRow({
     required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    Color? iconColor,
-    Color? titleColor,
+    required String label,
+    required String value,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: TulaiSpacing.sm),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
-        border: Border.all(color: TulaiColors.borderLight),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
-          child: Padding(
-            padding: const EdgeInsets.all(TulaiSpacing.lg),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: (iconColor ?? TulaiColors.primary).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: iconColor ?? TulaiColors.primary,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: TulaiSpacing.lg),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TulaiTextStyles.bodyLarge.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: titleColor ?? TulaiColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: TulaiSpacing.xs),
-                      Text(
-                        subtitle,
-                        style: TulaiTextStyles.bodySmall.copyWith(
-                          color: TulaiColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: TulaiColors.textMuted,
-                ),
-              ],
-            ),
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: TulaiColors.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
+          ),
+          child: Icon(
+            icon,
+            color: TulaiColors.primary,
+            size: 20,
           ),
         ),
-      ),
+        const SizedBox(width: TulaiSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TulaiTextStyles.bodySmall.copyWith(
+                  color: TulaiColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: TulaiSpacing.xs),
+              Text(
+                value,
+                style: TulaiTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -256,129 +322,80 @@ class TeacherSettings extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
           ),
-          title: Text(
-            'Logout',
-            style: TulaiTextStyles.heading3,
+          title: Row(
+            children: [
+              Icon(
+                Icons.logout,
+                color: TulaiColors.error,
+                size: 28,
+              ),
+              const SizedBox(width: TulaiSpacing.sm),
+              Text(
+                'Logout',
+                style: TulaiTextStyles.heading3,
+              ),
+            ],
           ),
           content: Text(
             'Are you sure you want to logout? You will need to sign in again to access your account.',
             style: TulaiTextStyles.bodyMedium,
           ),
           actions: [
-            TulaiButton(
-              text: 'Cancel',
-              style: TulaiButtonStyle.ghost,
+            TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-            ),
-            const SizedBox(width: TulaiSpacing.sm),
-            TulaiButton(
-              text: 'Logout',
-              style: TulaiButtonStyle.primary,
-              onPressed: () {
-                AppConfig().userType = UserType.none;
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/',
-                  (route) => false,
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showHelpDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: TulaiColors.backgroundPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
-          ),
-          title: Text(
-            'Help & Support',
-            style: TulaiTextStyles.heading3,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Need help with the Tulai ALS Enrollment System?',
-                style: TulaiTextStyles.bodyMedium,
-              ),
-              const SizedBox(height: TulaiSpacing.md),
-              Text(
-                '• Contact your system administrator\n• Check the user manual\n• Report technical issues',
+              child: Text(
+                'Cancel',
                 style: TulaiTextStyles.bodyMedium.copyWith(
                   color: TulaiColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TulaiButton(
-              text: 'Close',
-              style: TulaiButtonStyle.primary,
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAboutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: TulaiColors.backgroundPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
-          ),
-          title: Text(
-            'About Tulai',
-            style: TulaiTextStyles.heading3,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Tulai ALS Enrollment System',
-                style: TulaiTextStyles.bodyLarge.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: TulaiSpacing.sm),
-              Text(
-                'Version 1.0.0',
-                style: TulaiTextStyles.bodyMedium.copyWith(
-                  color: TulaiColors.textSecondary,
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await _supabase.auth.signOut();
+                  AppConfig().userType = UserType.none;
+                  if (context.mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/',
+                      (route) => false,
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.error_outline,
+                                color: Colors.white),
+                            const SizedBox(width: TulaiSpacing.sm),
+                            Text('Error logging out: $e'),
+                          ],
+                        ),
+                        backgroundColor: TulaiColors.error,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TulaiColors.error,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: TulaiSpacing.lg,
+                  vertical: TulaiSpacing.sm,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(TulaiBorderRadius.md),
                 ),
               ),
-              const SizedBox(height: TulaiSpacing.md),
-              Text(
-                'An AI-powered enrollment system for the Philippine Alternative Learning System (ALS). Designed to make education accessible for everyone.',
-                style: TulaiTextStyles.bodyMedium,
-              ),
-            ],
-          ),
-          actions: [
-            TulaiButton(
-              text: 'Close',
-              style: TulaiButtonStyle.primary,
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              child: const Text('Logout'),
             ),
           ],
         );
