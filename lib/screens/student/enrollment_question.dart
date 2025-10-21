@@ -8,7 +8,7 @@ import 'package:tulai/core/app_config.dart';
 import 'package:tulai/core/constants.dart';
 import 'package:tulai/core/design_system.dart';
 import 'package:tulai/screens/student/enrollment_review.dart';
-import 'package:tulai/screens/student/enrollment_success.dart';
+import 'package:tulai/screens/student/enrollment_waiting.dart';
 import 'package:tulai/services/gemini.dart';
 import 'package:tulai/services/student_db.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -286,60 +286,71 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
 
   Future<void> insertStudent() async {
     try {
-      // Create Student instance from your answers map
-      final student = Student(
-        lastName: answers['enrollee:Last Name'],
-        firstName: answers['enrollee:First Name'],
-        middleName: answers['enrollee:Middle Name'],
-        nameExtension: answers['enrollee:Name Extension'],
-        houseStreetSitio: answers['address:House No./Street/Sitio'],
-        barangay: answers['address:Barangay'],
-        municipalityCity: answers['address:Municipality/City'],
-        province: answers['address:Province'],
-        birthdate:
-            DateTime.tryParse(answers['others:Birthdate (mm/dd/yyyy)'] ?? ''),
-        sex: answers['others:Sex (Male/Female)'],
-        placeOfBirth: answers['others:Place of Birth (Municipality/City)'],
-        civilStatus: answers[
+      // Fetch the active batch (is_active = true)
+      final batchResponse = await supabase
+          .from('batches')
+          .select('id')
+          .eq('is_active', true)
+          .single();
+      final batchId = batchResponse['id'];
+
+      // Create pending submission record from answers map
+      final submissionData = {
+        'last_name': answers['enrollee:Last Name'],
+        'first_name': answers['enrollee:First Name'],
+        'middle_name': answers['enrollee:Middle Name'],
+        'name_extension': answers['enrollee:Name Extension'],
+        'house_street_sitio': answers['address:House No./Street/Sitio'],
+        'barangay': answers['address:Barangay'],
+        'municipality_city': answers['address:Municipality/City'],
+        'province': answers['address:Province'],
+        'birthdate': answers['others:Birthdate (mm/dd/yyyy)'],
+        'sex': answers['others:Sex (Male/Female)'],
+        'place_of_birth': answers['others:Place of Birth (Municipality/City)'],
+        'civil_status': answers[
             'others:Civil Status (Single, Married, Separated, Widower, Solo Parent)'],
-        religion: answers['others:Religion'],
-        ethnicGroup: answers['others:IP (Specify ethnic group):'],
-        motherTongue: answers['others:Mother Tongue'],
-        contactNumber: answers['others:Contact Number/s'],
-        isPWD: (answers['others:PWD (Yes/No)']?.toLowerCase() == 'yes'),
-        fatherLastName: answers['father:Father/Guardian Last Name'],
-        fatherFirstName: answers['father:Father/Guardian First Name'],
-        fatherMiddleName: answers['father:Father/Guardian Middle Name'],
-        fatherOccupation: answers['father:Father/Guardian Occupation'],
-        motherLastName: answers['mother:Mother/Guardian Last Name'],
-        motherFirstName: answers['mother:Mother/Guardian First Name'],
-        motherMiddleName: answers['mother:Mother/Guardian Middle Name'],
-        motherOccupation: answers['mother:Mother/Guardian Occupation'],
-        lastSchoolAttended: answers['education:Last School Attended'],
-        lastGradeLevelCompleted:
+        'religion': answers['others:Religion'],
+        'ethnic_group': answers['others:IP (Specify ethnic group):'],
+        'mother_tongue': answers['others:Mother Tongue'],
+        'contact_number': answers['others:Contact Number/s'],
+        'is_pwd': (answers['others:PWD (Yes/No)']?.toLowerCase() == 'yes'),
+        'father_last_name': answers['father:Father/Guardian Last Name'],
+        'father_first_name': answers['father:Father/Guardian First Name'],
+        'father_middle_name': answers['father:Father/Guardian Middle Name'],
+        'father_occupation': answers['father:Father/Guardian Occupation'],
+        'mother_last_name': answers['mother:Mother/Guardian Last Name'],
+        'mother_first_name': answers['mother:Mother/Guardian First Name'],
+        'mother_middle_name': answers['mother:Mother/Guardian Middle Name'],
+        'mother_occupation': answers['mother:Mother/Guardian Occupation'],
+        'last_school_attended': answers['education:Last School Attended'],
+        'last_grade_level_completed':
             answers['education:Last grade level completed'],
-        reasonForIncompleteSchooling:
+        'reason_for_incomplete_schooling':
             answers['education:Why did you not attend/complete schooling?'],
-        hasAttendedALS: (answers[
+        'has_attended_als': (answers[
                     'education:Have you attended ALS learning sessions before? (Yes/No)']
                 ?.toLowerCase() ==
             'yes'),
-      );
+        'submitted_at': DateTime.now().toIso8601String(),
+        'batch_id': batchId,
+      };
 
-      // Insert student using your helper class
-      await StudentDatabase.insertStudent(student);
+      // Insert into pending_submissions table instead of students
+      await supabase.from('pending_submissions').insert(submissionData);
 
-      print('Student inserted successfully!');
+      print('Submission sent for review!');
       if (!mounted) return;
-      Navigator.push(
+
+      // Navigate to waiting screen instead of success screen
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const EnrollmentSuccess(),
+          builder: (_) => const EnrollmentWaiting(),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      print('Error inserting student: $e');
+      print('Error submitting data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error submitting data: $e')),
       );

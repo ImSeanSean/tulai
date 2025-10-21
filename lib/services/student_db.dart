@@ -35,6 +35,7 @@ class Student {
   final bool? hasAttendedALS;
   // ignore: non_constant_identifier_names
   final DateTime? created_at;
+  final String? batchId;
 
   Student({
     this.id,
@@ -69,6 +70,7 @@ class Student {
     this.hasAttendedALS,
     // ignore: non_constant_identifier_names
     this.created_at,
+    this.batchId,
   });
 
   Map<String, dynamic> toMap() {
@@ -102,6 +104,7 @@ class Student {
       'last_grade_level_completed': lastGradeLevelCompleted,
       'reason_for_incomplete_schooling': reasonForIncompleteSchooling,
       'has_attended_als': hasAttendedALS,
+      'batch_id': batchId,
     };
   }
 
@@ -139,6 +142,7 @@ class Student {
       reasonForIncompleteSchooling: map['reason_for_incomplete_schooling'],
       hasAttendedALS: map['has_attended_als'],
       created_at: DateTime.parse(map['created_at']),
+      batchId: map['batch_id'],
     );
   }
 }

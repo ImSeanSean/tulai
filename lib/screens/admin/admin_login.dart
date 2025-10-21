@@ -43,7 +43,7 @@ class _AdminLoginState extends State<AdminLogin> {
           _passwordController.text == 'adminpassword!') {
         // Default admin login - no database check needed
         AppConfig().userType = UserType.teacher;
-
+        AppConfig().isSuperAdmin = true; // <-- Add this property to AppConfig
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/admin-dashboard');
         }
@@ -60,11 +60,12 @@ class _AdminLoginState extends State<AdminLogin> {
         // Get user role from database
         final userData = await _supabase
             .from('users')
-            .select('role')
+            .select('role, is_super_admin')
             .eq('id', response.user!.id)
             .single();
 
         final userRole = userData['role'] as String;
+        final isSuperAdmin = userData['is_super_admin'] == true;
 
         // Verify the user is an admin
         if (userRole != 'admin') {
@@ -76,8 +77,9 @@ class _AdminLoginState extends State<AdminLogin> {
           return;
         }
 
-        // Set user type in AppConfig
+        // Set user type and super admin flag in AppConfig
         AppConfig().userType = UserType.teacher;
+        AppConfig().isSuperAdmin = isSuperAdmin;
 
         // Navigate to admin dashboard
         if (mounted) {

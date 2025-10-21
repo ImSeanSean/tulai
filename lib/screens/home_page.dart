@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tulai/core/design_system.dart';
 import 'package:tulai/screens/teacher/enrollees.dart';
+import 'package:tulai/screens/teacher/pending_submissions.dart';
 import 'package:tulai/screens/teacher/settings.dart';
 import 'package:tulai/screens/student/enrollment_page.dart';
 
@@ -23,6 +24,12 @@ class _HomePageState extends State<HomePage> {
       description: 'View and manage student enrollments',
     ),
     NavigationItem(
+      icon: Icons.pending_actions_outlined,
+      selectedIcon: Icons.pending_actions,
+      label: 'Pending Submissions',
+      description: 'Review and approve student submissions',
+    ),
+    NavigationItem(
       icon: Icons.person_add_outlined,
       selectedIcon: Icons.person_add,
       label: 'New Enrollment',
@@ -41,6 +48,8 @@ class _HomePageState extends State<HomePage> {
       case 0:
         return const Enrollees();
       case 1:
+        return const PendingSubmissions();
+      case 2:
         return EnrollmentPage(
           onBackToTeacherDashboard: () {
             setState(() {
@@ -48,7 +57,7 @@ class _HomePageState extends State<HomePage> {
             });
           },
         );
-      case 2:
+      case 3:
         return const TeacherSettings();
       default:
         return _buildWelcomeScreen();
@@ -86,8 +95,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final isLargeScreen = TulaiResponsive.isLargeScreen(context);
     final sidebarWidth = isSidebarExpanded ? 280.0 : 72.0;
-    final isEnrollmentPage =
-        selectedIndex == 1; // Hide sidebar when enrollment is open
+    final isEnrollmentPage = selectedIndex ==
+        2; // Hide sidebar when enrollment is open (New Enrollment)
 
     if (isLargeScreen) {
       // Desktop/tablet layout with collapsible sidebar

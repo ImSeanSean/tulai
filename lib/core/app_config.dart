@@ -9,4 +9,5 @@ class AppConfig {
 
   UserType? userType;
   FormLanguage? formLanguage;
+  bool isSuperAdmin = false;
 }

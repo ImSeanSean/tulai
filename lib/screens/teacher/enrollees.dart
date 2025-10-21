@@ -8,6 +8,36 @@ import 'package:tulai/utils/download_helper.dart';
 import 'package:tulai/core/design_system.dart';
 import 'package:tulai/screens/teacher/enrolee_information.dart';
 import 'package:tulai/services/student_db.dart';
+import 'package:tulai/services/batch_db.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+// Helper widget for batch divider
+class _BatchDivider extends StatelessWidget {
+  final String label;
+  const _BatchDivider({required this.label});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12.0),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: TulaiColors.primary, thickness: 2)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            child: Text(
+              label,
+              style: TulaiTextStyles.heading3.copyWith(
+                color: TulaiColors.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: TulaiColors.primary, thickness: 2)),
+        ],
+      ),
+    );
+  }
+}
 
 enum SortMode { alphabetical, createdAt }
 
@@ -18,7 +48,11 @@ class Enrollees extends StatefulWidget {
   State<Enrollees> createState() => _EnrolleesState();
 }
 
-class _EnrolleesState extends State<Enrollees> {
+class _EnrolleesState extends State<Enrollees>
+    with SingleTickerProviderStateMixin {
+  List<Batch> batches = [];
+  String? selectedBatchId;
+  TabController? _tabController;
   List<Student> students = [];
   List<Student> filteredStudents = [];
   bool isLoading = true;
@@ -30,12 +64,14 @@ class _EnrolleesState extends State<Enrollees> {
   @override
   void initState() {
     super.initState();
+    fetchBatches();
     fetchStudents();
     searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
+    _tabController?.dispose();
     searchController.removeListener(_onSearchChanged);
     searchController.dispose();
     super.dispose();
@@ -56,7 +92,9 @@ class _EnrolleesState extends State<Enrollees> {
 
       // Handle empty names
       final searchName = fullName.isNotEmpty ? fullName : 'unknown student';
-      return searchName.contains(query);
+      final matchesBatch =
+          selectedBatchId == null || student.batchId == selectedBatchId;
+      return searchName.contains(query) && matchesBatch;
     }).toList();
 
     // Sort filtered list based on currentSortMode
@@ -87,6 +125,28 @@ class _EnrolleesState extends State<Enrollees> {
 
     setState(() {
       filteredStudents = filtered;
+    });
+  }
+
+  Future<void> fetchBatches() async {
+    final supabase = Supabase.instance.client;
+    final response = await supabase
+        .from('batches')
+        .select('id, start_year, end_year')
+        .order('start_year', ascending: true); // oldest to newest
+    setState(() {
+      batches = (response as List).map((e) => Batch.fromMap(e)).toList();
+      if (batches.isNotEmpty) {
+        selectedBatchId = batches.first.id;
+        _tabController = TabController(length: batches.length, vsync: this);
+        _tabController!.addListener(() {
+          if (_tabController!.indexIsChanging) return;
+          setState(() {
+            selectedBatchId = batches[_tabController!.index].id;
+            _filterAndSortStudents();
+          });
+        });
+      }
     });
   }
 
@@ -644,6 +704,35 @@ class _EnrolleesState extends State<Enrollees> {
     );
   }
 
+  // Helper for fallback grouped list if no batches (legacy/unassigned)
+  List<Widget> _buildBatchGroupedList() {
+    if (filteredStudents.isEmpty) return [];
+    return [
+      _BatchDivider(label: 'Enrollees'),
+      ...filteredStudents.map((s) => _buildStudentCard(s, context)),
+    ];
+  }
+
+  // Fix for firstWhere: return a dummy Batch if not found
+  List<Widget> _buildBatchGroupedListFor(String batchId) {
+    final studentsForBatch =
+        filteredStudents.where((s) => s.batchId == batchId).toList();
+    final batch = batches.firstWhere(
+      (b) => b.id == batchId,
+      orElse: () => Batch(id: batchId, startYear: 0, endYear: 0),
+    );
+    String label = (batch.startYear != 0 && batch.endYear != 0)
+        ? 'Batch ${batch.startYear} - ${batch.endYear}'
+        : 'Unassigned Batch';
+    if (studentsForBatch.isEmpty) {
+      return [_BatchDivider(label: label), _buildEmptyState()];
+    }
+    return [
+      _BatchDivider(label: label),
+      ...studentsForBatch.map((s) => _buildStudentCard(s, context)),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     // Determine if we're on a large screen (web/tablet)
@@ -699,25 +788,53 @@ class _EnrolleesState extends State<Enrollees> {
           : Column(
               children: [
                 _buildSearchAndFilter(),
-                Expanded(
-                  child: filteredStudents.isEmpty
-                      ? _buildEmptyState()
-                      : RefreshIndicator(
-                          onRefresh: fetchStudents,
-                          color: TulaiColors.primary,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: TulaiSpacing.md),
-                            itemCount: filteredStudents.length,
-                            itemBuilder: (context, index) {
-                              return _buildStudentCard(
-                                filteredStudents[index],
-                                context,
-                              );
+                if (batches.isNotEmpty && _tabController != null)
+                  TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    labelColor: TulaiColors.primary,
+                    unselectedLabelColor: TulaiColors.textMuted,
+                    indicatorColor: TulaiColors.primary,
+                    tabs: [
+                      for (final batch in batches)
+                        Tab(text: 'Batch ${batch.startYear} - ${batch.endYear}')
+                    ],
+                  ),
+                if (batches.isNotEmpty && _tabController != null)
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        for (final batch in batches)
+                          RefreshIndicator(
+                            onRefresh: () async {
+                              await fetchBatches();
+                              await fetchStudents();
                             },
+                            color: TulaiColors.primary,
+                            child: ListView(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: TulaiSpacing.md),
+                              children: _buildBatchGroupedListFor(batch.id),
+                            ),
                           ),
-                        ),
-                ),
+                      ],
+                    ),
+                  ),
+                if (batches.isEmpty)
+                  Expanded(
+                    child: filteredStudents.isEmpty
+                        ? _buildEmptyState()
+                        : RefreshIndicator(
+                            onRefresh: fetchStudents,
+                            color: TulaiColors.primary,
+                            child: ListView(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: TulaiSpacing.md),
+                              children: _buildBatchGroupedList(),
+                            ),
+                          ),
+                  ),
               ],
             ),
     );
