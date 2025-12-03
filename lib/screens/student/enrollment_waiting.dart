@@ -27,38 +27,10 @@ class EnrollmentWaiting extends StatelessWidget {
             child: Center(
               child: SingleChildScrollView(
                 padding: EdgeInsets.all(
-                    isLargeScreen ? TulaiSpacing.xxl : TulaiSpacing.lg),
+                    isLargeScreen ? TulaiSpacing.lg : TulaiSpacing.md),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Success Icon with Animation
-                    Container(
-                      width: isLargeScreen ? 160 : 120,
-                      height: isLargeScreen ? 160 : 120,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [TulaiColors.success, Color(0xFF2ECC71)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: TulaiColors.success.withOpacity(0.3),
-                            blurRadius: 24,
-                            spreadRadius: 8,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: Colors.white,
-                        size: 80,
-                      ),
-                    ),
-
-                    const SizedBox(height: TulaiSpacing.xxl),
-
                     // Success Message Card
                     Container(
                       constraints: BoxConstraints(
@@ -67,57 +39,63 @@ class EnrollmentWaiting extends StatelessWidget {
                       child: TulaiCard(
                         child: Column(
                           children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: TulaiColors.success,
+                              size: 48,
+                            ),
+                            const SizedBox(height: TulaiSpacing.sm),
                             Text(
                               'Submission Successful!',
-                              style: TulaiTextStyles.heading1.copyWith(
+                              style: TulaiTextStyles.heading2.copyWith(
                                 color: TulaiColors.success,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: TulaiSpacing.md),
+                            const SizedBox(height: TulaiSpacing.xs),
                             Text(
                               'Matagumpay ang iyong pagsusumite!',
-                              style: TulaiTextStyles.heading3.copyWith(
+                              style: TulaiTextStyles.bodyMedium.copyWith(
                                 color: TulaiColors.textSecondary,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: TulaiSpacing.xl),
+                            const SizedBox(height: TulaiSpacing.sm),
                             const Divider(),
-                            const SizedBox(height: TulaiSpacing.xl),
+                            const SizedBox(height: TulaiSpacing.sm),
                             Icon(
                               Icons.pending_actions,
-                              size: 64,
+                              size: 40,
                               color: TulaiColors.primary.withOpacity(0.6),
                             ),
-                            const SizedBox(height: TulaiSpacing.lg),
+                            const SizedBox(height: TulaiSpacing.sm),
                             Text(
                               'Please Wait for Teacher Review',
-                              style: TulaiTextStyles.heading2.copyWith(
+                              style: TulaiTextStyles.heading3.copyWith(
                                 color: TulaiColors.primary,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: TulaiSpacing.md),
+                            const SizedBox(height: TulaiSpacing.xs),
                             Text(
                               'Mangyaring maghintay para sa pagsusuri ng guro',
-                              style: TulaiTextStyles.bodyLarge.copyWith(
+                              style: TulaiTextStyles.bodyMedium.copyWith(
                                 color: TulaiColors.textSecondary,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: TulaiSpacing.xl),
+                            const SizedBox(height: TulaiSpacing.sm),
                             // Animated loading indicator
                             const SizedBox(
-                              width: 40,
-                              height: 40,
+                              width: 28,
+                              height: 28,
                               child: CircularProgressIndicator(
-                                strokeWidth: 3,
+                                strokeWidth: 2,
                               ),
                             ),
-                            const SizedBox(height: TulaiSpacing.xl),
+                            const SizedBox(height: TulaiSpacing.sm),
                             Container(
-                              padding: const EdgeInsets.all(TulaiSpacing.lg),
+                              padding: const EdgeInsets.all(TulaiSpacing.sm),
                               decoration: BoxDecoration(
                                 color: TulaiColors.info.withOpacity(0.1),
                                 borderRadius:
@@ -133,13 +111,13 @@ class EnrollmentWaiting extends StatelessWidget {
                                       Icon(
                                         Icons.info_outline,
                                         color: TulaiColors.info,
-                                        size: 20,
+                                        size: 18,
                                       ),
-                                      const SizedBox(width: TulaiSpacing.sm),
+                                      const SizedBox(width: TulaiSpacing.xs),
                                       Expanded(
                                         child: Text(
                                           'What happens next?',
-                                          style: TulaiTextStyles.bodyLarge
+                                          style: TulaiTextStyles.bodyMedium
                                               .copyWith(
                                             color: TulaiColors.info,
                                             fontWeight: FontWeight.w600,
@@ -148,28 +126,28 @@ class EnrollmentWaiting extends StatelessWidget {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: TulaiSpacing.md),
+                                  const SizedBox(height: TulaiSpacing.xs),
                                   Text(
-                                    '1. The teacher will review your information\n'
-                                    '2. They may ask you questions or verify details\n'
-                                    '3. Once approved, you\'re officially enrolled!\n'
+                                    '1. Teacher will review your information\n'
+                                    '2. They may ask questions or verify details\n'
+                                    '3. Once approved, you\'re enrolled!\n'
                                     '4. Please wait here with the device',
-                                    style: TulaiTextStyles.bodyMedium.copyWith(
+                                    style: TulaiTextStyles.bodySmall.copyWith(
                                       color: TulaiColors.textSecondary,
-                                      height: 1.8,
+                                      height: 1.5,
                                     ),
                                   ),
-                                  const SizedBox(height: TulaiSpacing.sm),
-                                  const Divider(),
-                                  const SizedBox(height: TulaiSpacing.sm),
+                                  const SizedBox(height: TulaiSpacing.xs),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: TulaiSpacing.xs),
                                   Text(
-                                    '1. Susuriin ng guro ang iyong impormasyon\n'
-                                    '2. Maaari kang tanungin o mag-verify ng detalye\n'
-                                    '3. Kapag naaprubahan, opisyal ka nang naka-enroll!\n'
-                                    '4. Mangyaring maghintay dito kasama ang device',
+                                    '1. Susuriin ng guro ang impormasyon\n'
+                                    '2. Maaari kang tanungin o mag-verify\n'
+                                    '3. Kapag naaprubahan, naka-enroll ka na!\n'
+                                    '4. Maghintay dito kasama ang device',
                                     style: TulaiTextStyles.bodySmall.copyWith(
                                       color: TulaiColors.textMuted,
-                                      height: 1.8,
+                                      height: 1.5,
                                     ),
                                   ),
                                 ],
@@ -180,7 +158,7 @@ class EnrollmentWaiting extends StatelessWidget {
                       ),
                     ),
 
-                    const SizedBox(height: TulaiSpacing.xxl),
+                    const SizedBox(height: TulaiSpacing.md),
 
                     // Teacher-only button to return to dashboard
                     Container(
@@ -191,12 +169,12 @@ class EnrollmentWaiting extends StatelessWidget {
                         onPressed: () {
                           _showTeacherConfirmation(context);
                         },
-                        icon: const Icon(Icons.admin_panel_settings),
+                        icon: const Icon(Icons.admin_panel_settings, size: 18),
                         label: const Text('Teacher: Return to Dashboard'),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                            vertical: TulaiSpacing.md,
-                            horizontal: TulaiSpacing.lg,
+                            vertical: TulaiSpacing.sm,
+                            horizontal: TulaiSpacing.md,
                           ),
                           side: BorderSide(
                             color: TulaiColors.textMuted,
@@ -255,12 +233,8 @@ class EnrollmentWaiting extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(dialogContext); // Close dialog
-                // Navigate back to root and clear all routes
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/teacher',
-                  (route) => false,
-                );
+                // Navigate back to root
+                Navigator.of(context).popUntil((route) => route.isFirst);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: TulaiColors.primary,

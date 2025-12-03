@@ -250,6 +250,189 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
     }
   }
 
+  bool _shouldUseDropdown(String question) {
+    final dropdownQuestions = [
+      'Sex (Male/Female)',
+      'Kasarian (Lalaki/Babae)',
+      'Civil Status (Single, Married, Separated, Widower, Solo Parent)',
+      'Katayuang Sibil (Binata, Dalaga, Kasal, Hiwalay, Biyudo/a, Solo Parent)',
+      'PWD (Yes/No)',
+      'PWD (Oo/Hindi)',
+      'Have you attended ALS learning sessions before? (Yes/No)',
+      'Nakapag-attend ka na ba ng ALS learning sessions? (Oo/Hindi)',
+      'Name Extension',
+      'Ekstensyon ng Pangalan',
+    ];
+    return dropdownQuestions.contains(question);
+  }
+
+  List<String> _getDropdownOptions(String question) {
+    final isFilipino = AppConfig().formLanguage == FormLanguage.filipino;
+
+    if (question.contains('Sex') || question.contains('Kasarian')) {
+      return isFilipino ? ['Lalaki', 'Babae'] : ['Male', 'Female'];
+    }
+    if (question.contains('Civil Status') ||
+        question.contains('Katayuang Sibil')) {
+      return isFilipino
+          ? ['Binata', 'Dalaga', 'Kasal', 'Hiwalay', 'Biyudo/a', 'Solo Parent']
+          : ['Single', 'Married', 'Separated', 'Widowed', 'Solo Parent'];
+    }
+    if (question.contains('PWD')) {
+      return isFilipino ? ['Oo', 'Hindi'] : ['Yes', 'No'];
+    }
+    if (question.contains('ALS learning sessions') ||
+        question.contains('Nakapag-attend')) {
+      return isFilipino ? ['Oo', 'Hindi'] : ['Yes', 'No'];
+    }
+    if (question.contains('Name Extension') ||
+        question.contains('Ekstensyon')) {
+      return ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+    }
+    return [];
+  }
+
+  TextCapitalization _getTextCapitalization(String question) {
+    // Name fields should capitalize words
+    if (question.contains('Name') ||
+        question.contains('Pangalan') ||
+        question.contains('Apelyido') ||
+        question.contains('Occupation') ||
+        question.contains('Trabaho')) {
+      return TextCapitalization.words;
+    }
+    // Address fields should capitalize words
+    if (question.contains('Barangay') ||
+        question.contains('Municipality') ||
+        question.contains('City') ||
+        question.contains('Province') ||
+        question.contains('Bayan') ||
+        question.contains('Lungsod') ||
+        question.contains('Lalawigan') ||
+        question.contains('Place of Birth') ||
+        question.contains('Lugar ng Kapanganakan') ||
+        question.contains('Street') ||
+        question.contains('Sitio') ||
+        question.contains('Kalye')) {
+      return TextCapitalization.words;
+    }
+    // Religion and other text fields
+    if (question.contains('Religion') ||
+        question.contains('Relihiyon') ||
+        question.contains('ethnic group') ||
+        question.contains('grupo') ||
+        question.contains('Mother Tongue') ||
+        question.contains('Wika') ||
+        question.contains('School') ||
+        question.contains('Paaralan')) {
+      return TextCapitalization.words;
+    }
+    // Sentences for reason fields
+    if (question.contains('Why') || question.contains('Bakit')) {
+      return TextCapitalization.sentences;
+    }
+    return TextCapitalization.none;
+  }
+
+  Future<void> _handleNextOrSkip() async {
+    final q = allQuestions[_currentQuestionIndex];
+    final key = '${q.section}:${q.question}';
+    final currentAnswer = answers[key]?.trim() ?? '';
+    final isFilipino = AppConfig().formLanguage == FormLanguage.filipino;
+
+    // Check if this is a required field (Last Name or First Name)
+    final isRequiredField = (q.section == 'enrollee') &&
+        (q.question == 'Last Name' ||
+            q.question == 'First Name' ||
+            q.question == 'Apelyido' ||
+            q.question == 'Pangalan');
+
+    // If answer is empty
+    if (currentAnswer.isEmpty) {
+      // If it's a required field, show error and don't allow skip
+      if (isRequiredField) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              isFilipino ? 'Kinakailangan ang Sagot' : 'Answer Required',
+              style: TulaiTextStyles.heading3.copyWith(
+                color: TulaiColors.error,
+              ),
+            ),
+            content: Text(
+              isFilipino
+                  ? 'Ang tanong na ito ay kinakailangan. Mangyaring magbigay ng sagot para magpatuloy.'
+                  : 'This question is required. Please provide an answer to continue.',
+              style: TulaiTextStyles.bodyMedium,
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: TulaiColors.primary,
+                ),
+                child: Text(
+                  'OK',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        );
+        return; // Don't proceed
+      }
+
+      // For optional fields, show skip confirmation
+      final shouldSkip = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            isFilipino ? 'Laktawan ang Tanong?' : 'Skip Question?',
+            style: TulaiTextStyles.heading3,
+          ),
+          content: Text(
+            isFilipino
+                ? 'Walang sagot na naibigay. Gusto mo bang laktawan ang tanong na ito?'
+                : 'No answer provided. Would you like to skip this question?',
+            style: TulaiTextStyles.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                isFilipino ? 'Hindi' : 'No',
+                style: TextStyle(color: TulaiColors.textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TulaiColors.primary,
+              ),
+              child: Text(
+                isFilipino ? 'Oo, Laktawan' : 'Yes, Skip',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldSkip == true) {
+        // Set answer to N/A for skipped questions
+        answers[key] = 'N/A';
+        suggestions = [];
+        _nextQuestion();
+      }
+      // If false or null, stay on current question
+    } else {
+      // Answer provided, proceed normally
+      suggestions = [];
+      _nextQuestion();
+    }
+  }
+
   void _onAnswerChanged(String value) {
     final q = allQuestions[_currentQuestionIndex];
     answers['${q.section}:${q.question}'] = value;
@@ -284,6 +467,43 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
     }
   }
 
+  String? _normalizeSex(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final lower = value.toLowerCase();
+    if (lower == 'lalaki' || lower == 'male') return 'Male';
+    if (lower == 'babae' || lower == 'female') return 'Female';
+    return value;
+  }
+
+  String? _normalizeCivilStatus(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final lower = value.toLowerCase();
+    if (lower == 'binata' || lower == 'dalaga' || lower == 'single')
+      return 'Single';
+    if (lower == 'kasal' || lower == 'married') return 'Married';
+    if (lower == 'hiwalay' || lower == 'separated') return 'Separated';
+    if (lower == 'biyudo/a' ||
+        lower == 'balo' ||
+        lower == 'widowed' ||
+        lower == 'widower') return 'Widowed';
+    if (lower.contains('solo parent')) return 'Solo Parent';
+    return value;
+  }
+
+  String? _normalizeReligion(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final lower = value.toLowerCase();
+    if (lower.contains('catholic') || lower == 'katoliko')
+      return 'Roman Catholic';
+    if (lower.contains('islam') || lower.contains('muslim')) return 'Islam';
+    if (lower.contains('iglesia')) return 'Iglesia ni Cristo';
+    if (lower.contains('born again')) return 'Born Again Christian';
+    if (lower.contains('adventist') || lower.contains('seventh'))
+      return 'Seventh-day Adventist';
+    if (lower.contains('buddhis')) return 'Buddhism';
+    return 'Other';
+  }
+
   Future<void> insertStudent() async {
     try {
       // Fetch the active batch (is_active = true)
@@ -305,11 +525,11 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
         'municipality_city': answers['address:Municipality/City'],
         'province': answers['address:Province'],
         'birthdate': answers['others:Birthdate (mm/dd/yyyy)'],
-        'sex': answers['others:Sex (Male/Female)'],
+        'sex': _normalizeSex(answers['others:Sex (Male/Female)']),
         'place_of_birth': answers['others:Place of Birth (Municipality/City)'],
-        'civil_status': answers[
-            'others:Civil Status (Single, Married, Separated, Widower, Solo Parent)'],
-        'religion': answers['others:Religion'],
+        'civil_status': _normalizeCivilStatus(answers[
+            'others:Civil Status (Single, Married, Separated, Widower, Solo Parent)']),
+        'religion': _normalizeReligion(answers['others:Religion']),
         'ethnic_group': answers['others:IP (Specify ethnic group):'],
         'mother_tongue': answers['others:Mother Tongue'],
         'contact_number': answers['others:Contact Number/s'],
@@ -497,25 +717,71 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                                   ),
                                 ],
                               ),
-                              child: TextField(
-                                style: TextStyle(
-                                  fontSize: 26,
-                                  color: TulaiColors.textPrimary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                controller: _answerController,
-                                onChanged: _onAnswerChanged,
-                                decoration: InputDecoration(
-                                  border: InputBorder.none,
-                                  hintText: 'Enter your answer',
-                                  hintStyle: TextStyle(
-                                    color: TulaiColors.textMuted,
-                                    fontSize: 24,
-                                  ),
-                                  contentPadding:
-                                      const EdgeInsets.all(TulaiSpacing.md),
-                                ),
-                              ),
+                              child: _shouldUseDropdown(currentQ.question)
+                                  ? DropdownButtonFormField<String>(
+                                      value: answers['${currentQ.section}:${currentQ.question}']
+                                                  ?.isNotEmpty ==
+                                              true
+                                          ? answers[
+                                              '${currentQ.section}:${currentQ.question}']
+                                          : null,
+                                      decoration: InputDecoration(
+                                        border: InputBorder.none,
+                                        hintText: 'Select an option',
+                                        hintStyle: TextStyle(
+                                          color: TulaiColors.textMuted,
+                                          fontSize: 24,
+                                        ),
+                                        contentPadding: const EdgeInsets.all(
+                                            TulaiSpacing.md),
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 26,
+                                        color: TulaiColors.textPrimary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      dropdownColor:
+                                          TulaiColors.backgroundPrimary,
+                                      icon: Icon(Icons.arrow_drop_down,
+                                          color: TulaiColors.primary, size: 32),
+                                      isExpanded: true,
+                                      items:
+                                          _getDropdownOptions(currentQ.question)
+                                              .map((option) => DropdownMenuItem(
+                                                    value: option,
+                                                    child: Text(option),
+                                                  ))
+                                              .toList(),
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          _answerController.text = value;
+                                          _onAnswerChanged(value);
+                                          setState(() {});
+                                        }
+                                      },
+                                    )
+                                  : TextField(
+                                      style: TextStyle(
+                                        fontSize: 26,
+                                        color: TulaiColors.textPrimary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      controller: _answerController,
+                                      onChanged: _onAnswerChanged,
+                                      textCapitalization:
+                                          _getTextCapitalization(
+                                              currentQ.question),
+                                      decoration: InputDecoration(
+                                        border: InputBorder.none,
+                                        hintText: 'Enter your answer',
+                                        hintStyle: TextStyle(
+                                          color: TulaiColors.textMuted,
+                                          fontSize: 24,
+                                        ),
+                                        contentPadding: const EdgeInsets.all(
+                                            TulaiSpacing.md),
+                                      ),
+                                    ),
                             ),
                           ),
                           const SizedBox(width: TulaiSpacing.sm),
@@ -780,8 +1046,7 @@ class _EnrollmentQuestionsState extends State<EnrollmentQuestions> {
                                       insertStudent();
                                     }
                                   } else {
-                                    suggestions = [];
-                                    _nextQuestion();
+                                    await _handleNextOrSkip();
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(

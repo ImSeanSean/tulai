@@ -35,6 +35,7 @@ class EnrollmentReview extends StatelessWidget {
 
   String _formatAnswer(String answer) {
     if (answer.isEmpty) return 'Not provided';
+    if (answer.trim() == 'N/A') return 'N/A';
 
     // Check if it's a name, address, or text that should be title case
     return _capitalizeText(answer.trim());

@@ -17,6 +17,8 @@ class _ReviewSubmissionState extends State<ReviewSubmission> {
   final _formKey = GlobalKey<FormState>();
   late Map<String, TextEditingController> _controllers;
   bool _isSaving = false;
+  List<Map<String, dynamic>> _potentialDuplicates = [];
+  bool _isCheckingDuplicates = true;
 
   final List<FieldGroup> _fieldGroups = [
     FieldGroup(
@@ -53,10 +55,18 @@ class _ReviewSubmissionState extends State<ReviewSubmission> {
               'Single',
               'Married',
               'Separated',
-              'Widower',
+              'Widowed',
               'Solo Parent'
             ]),
-        FieldInfo('religion', 'Religion'),
+        FieldInfo('religion', 'Religion', type: FieldType.dropdown, options: [
+          'Roman Catholic',
+          'Islam',
+          'Iglesia ni Cristo',
+          'Born Again Christian',
+          'Seventh-day Adventist',
+          'Buddhism',
+          'Other'
+        ]),
         FieldInfo('ethnic_group', 'Ethnic Group/IP'),
         FieldInfo('mother_tongue', 'Mother Tongue'),
         FieldInfo('contact_number', 'Contact Number'),
@@ -98,17 +108,95 @@ class _ReviewSubmissionState extends State<ReviewSubmission> {
     ),
   ];
 
+  String? _normalizeSex(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final lower = value.toLowerCase();
+    if (lower == 'lalaki' || lower == 'male') return 'Male';
+    if (lower == 'babae' || lower == 'female') return 'Female';
+    return value;
+  }
+
+  String? _normalizeCivilStatus(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final lower = value.toLowerCase();
+    if (lower == 'binata' || lower == 'dalaga' || lower == 'single')
+      return 'Single';
+    if (lower == 'kasal' || lower == 'married') return 'Married';
+    if (lower == 'hiwalay' || lower == 'separated') return 'Separated';
+    if (lower == 'biyudo/a' ||
+        lower == 'balo' ||
+        lower == 'widowed' ||
+        lower == 'widower') return 'Widowed';
+    if (lower.contains('solo parent')) return 'Solo Parent';
+    return value;
+  }
+
+  String? _normalizeReligion(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final lower = value.toLowerCase();
+    if (lower.contains('catholic') || lower == 'katoliko')
+      return 'Roman Catholic';
+    if (lower.contains('islam') || lower.contains('muslim')) return 'Islam';
+    if (lower.contains('iglesia')) return 'Iglesia ni Cristo';
+    if (lower.contains('born again')) return 'Born Again Christian';
+    if (lower.contains('adventist') || lower.contains('seventh'))
+      return 'Seventh-day Adventist';
+    if (lower.contains('buddhis')) return 'Buddhism';
+    return 'Other';
+  }
+
   @override
   void initState() {
     super.initState();
     _initializeControllers();
+    _checkForDuplicates();
+  }
+
+  Future<void> _checkForDuplicates() async {
+    final firstName = widget.submission['first_name']?.toString().trim();
+    final lastName = widget.submission['last_name']?.toString().trim();
+    final birthdate = widget.submission['birthdate'];
+
+    if (firstName == null || lastName == null || birthdate == null) {
+      setState(() => _isCheckingDuplicates = false);
+      return;
+    }
+
+    try {
+      final existingStudents = await _supabase
+          .from('students')
+          .select(
+              'id, first_name, last_name, middle_name, birthdate, contact_number, barangay, batch_id')
+          .ilike('first_name', firstName)
+          .ilike('last_name', lastName)
+          .eq('birthdate', birthdate);
+
+      setState(() {
+        _potentialDuplicates =
+            List<Map<String, dynamic>>.from(existingStudents);
+        _isCheckingDuplicates = false;
+      });
+    } catch (e) {
+      debugPrint('Error checking duplicates: $e');
+      setState(() => _isCheckingDuplicates = false);
+    }
   }
 
   void _initializeControllers() {
     _controllers = {};
     for (var group in _fieldGroups) {
       for (var field in group.fields) {
-        final value = widget.submission[field.key];
+        var value = widget.submission[field.key];
+
+        // Normalize dropdown fields
+        if (field.key == 'sex') {
+          value = _normalizeSex(value?.toString());
+        } else if (field.key == 'civil_status') {
+          value = _normalizeCivilStatus(value?.toString());
+        } else if (field.key == 'religion') {
+          value = _normalizeReligion(value?.toString());
+        }
+
         if (field.type == FieldType.checkbox) {
           _controllers[field.key] = TextEditingController(
             text: value?.toString() ?? 'false',
@@ -277,6 +365,219 @@ class _ReviewSubmissionState extends State<ReviewSubmission> {
     }
   }
 
+  Future<void> _reEnrollExistingStudent(
+      Map<String, dynamic> existingStudent) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.person_add, color: TulaiColors.primary),
+            const SizedBox(width: TulaiSpacing.sm),
+            const Text('Confirm Re-enrollment'),
+          ],
+        ),
+        content: Text(
+          'This will re-enroll the existing student to the active batch and discard this submission. Continue?',
+          style: TulaiTextStyles.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: TulaiTextStyles.bodyMedium.copyWith(
+                color: TulaiColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: TulaiColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Re-enroll'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      // Get the active batch
+      final batchResponse = await _supabase
+          .from('batches')
+          .select('id')
+          .eq('is_active', true)
+          .single();
+
+      final activeBatchId = batchResponse['id'];
+
+      // Update the existing student's batch_id to re-enroll them
+      await _supabase
+          .from('students')
+          .update({'batch_id': activeBatchId}).eq('id', existingStudent['id']);
+
+      // Delete the pending submission
+      await _supabase
+          .from('pending_submissions')
+          .delete()
+          .eq('id', widget.submission['id']);
+
+      setState(() => _isSaving = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: TulaiSpacing.sm),
+                const Expanded(
+                  child: Text('Student re-enrolled successfully'),
+                ),
+              ],
+            ),
+            backgroundColor: TulaiColors.success,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error re-enrolling student: $e'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showReEnrollDialog() async {
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.person_add, color: TulaiColors.primary),
+            const SizedBox(width: TulaiSpacing.sm),
+            const Expanded(
+              child: Text('Re-enroll Existing Student'),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select which existing student to re-enroll to the active batch:',
+                style: TulaiTextStyles.bodyMedium.copyWith(
+                  color: TulaiColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: TulaiSpacing.md),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 300),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _potentialDuplicates.length,
+                  itemBuilder: (context, index) {
+                    final student = _potentialDuplicates[index];
+                    final fullName = [
+                      student['first_name'],
+                      student['middle_name'],
+                      student['last_name'],
+                    ]
+                        .where((e) => e != null && e.toString().isNotEmpty)
+                        .join(' ');
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: TulaiSpacing.sm),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: TulaiColors.primary.withOpacity(0.1),
+                          child: Icon(
+                            Icons.person,
+                            color: TulaiColors.primary,
+                          ),
+                        ),
+                        title: Text(
+                          fullName,
+                          style: TulaiTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (student['barangay'] != null)
+                              Text(
+                                'Barangay: ${student['barangay']}',
+                                style: TulaiTextStyles.caption,
+                              ),
+                            if (student['contact_number'] != null)
+                              Text(
+                                'Contact: ${student['contact_number']}',
+                                style: TulaiTextStyles.caption,
+                              ),
+                          ],
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _reEnrollExistingStudent(student);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: TulaiColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: TulaiSpacing.md,
+                              vertical: TulaiSpacing.sm,
+                            ),
+                          ),
+                          child: const Text('Re-enroll'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TulaiTextStyles.bodyMedium.copyWith(
+                color: TulaiColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   DateTime? _parseDateString(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return null;
     try {
@@ -307,7 +608,7 @@ class _ReviewSubmissionState extends State<ReviewSubmission> {
         foregroundColor: Colors.white,
         elevation: 0,
         title: Text(
-          'Review Submission',
+          'Review Information',
           style: TulaiTextStyles.heading3.copyWith(color: Colors.white),
         ),
         actions: [
@@ -350,6 +651,140 @@ class _ReviewSubmissionState extends State<ReviewSubmission> {
                 ],
               ),
             ),
+
+            // Duplicate warning banner
+            if (_isCheckingDuplicates)
+              Container(
+                padding: const EdgeInsets.all(TulaiSpacing.md),
+                color: TulaiColors.info.withOpacity(0.1),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: TulaiColors.info,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                    const SizedBox(width: TulaiSpacing.md),
+                    Expanded(
+                      child: Text(
+                        'Checking for potential duplicates...',
+                        style: TulaiTextStyles.bodySmall.copyWith(
+                          color: TulaiColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (_potentialDuplicates.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(TulaiSpacing.md),
+                color: TulaiColors.error.withOpacity(0.1),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: TulaiColors.error,
+                          size: 24,
+                        ),
+                        const SizedBox(width: TulaiSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Potential Duplicate Enrollment Detected',
+                            style: TulaiTextStyles.labelLarge.copyWith(
+                              color: TulaiColors.error,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: TulaiSpacing.sm),
+                    Text(
+                      'Found ${_potentialDuplicates.length} existing student(s) with the same name and birthdate. You can re-enroll the existing student instead of creating a duplicate.',
+                      style: TulaiTextStyles.bodySmall.copyWith(
+                        color: TulaiColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: TulaiSpacing.md),
+                    Wrap(
+                      spacing: TulaiSpacing.sm,
+                      runSpacing: TulaiSpacing.sm,
+                      children: _potentialDuplicates.map((student) {
+                        final fullName = [
+                          student['first_name'],
+                          student['middle_name'],
+                          student['last_name'],
+                        ]
+                            .where((e) => e != null && e.toString().isNotEmpty)
+                            .join(' ');
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: TulaiSpacing.sm,
+                            vertical: TulaiSpacing.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: TulaiColors.backgroundPrimary,
+                            borderRadius:
+                                BorderRadius.circular(TulaiBorderRadius.sm),
+                            border: Border.all(
+                              color: TulaiColors.error.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.person,
+                                size: 14,
+                                color: TulaiColors.textSecondary,
+                              ),
+                              const SizedBox(width: TulaiSpacing.xs),
+                              Text(
+                                fullName,
+                                style: TulaiTextStyles.caption.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (student['barangay'] != null) ...[
+                                Text(
+                                  ' • ${student['barangay']}',
+                                  style: TulaiTextStyles.caption.copyWith(
+                                    color: TulaiColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: TulaiSpacing.md),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSaving ? null : _showReEnrollDialog,
+                        icon: const Icon(Icons.person_add, size: 20),
+                        label: const Text('Use Existing Student & Re-enroll'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: TulaiColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: TulaiSpacing.sm,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             // Form content
             Expanded(

@@ -176,4 +176,16 @@ class StudentDatabase {
   static Future<void> deleteStudent(String id) async {
     await supabase.from(_table).delete().eq('id', id);
   }
+
+  /// Get students for a specific teacher (by teacherId)
+  static Future<List<Student>> getStudentsForTeacher(String teacherId) async {
+    final response =
+        await supabase.from(_table).select().eq('teacher_id', teacherId);
+    return (response as List).map((data) => Student.fromMap(data)).toList();
+  }
+
+  /// Get students for current teacher (now returns all students for teachers)
+  static Future<List<Student>> getStudentsForCurrentTeacher() async {
+    return getStudents();
+  }
 }

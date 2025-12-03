@@ -15,6 +15,7 @@ class _PendingSubmissionsState extends State<PendingSubmissions> {
   List<Map<String, dynamic>> _submissions = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  Map<String, List<Map<String, dynamic>>> _potentialDuplicates = {};
 
   @override
   void initState() {
@@ -31,8 +32,13 @@ class _PendingSubmissionsState extends State<PendingSubmissions> {
           .select()
           .order('submitted_at', ascending: false);
 
+      final submissions = List<Map<String, dynamic>>.from(response);
+
+      // Check for potential duplicates
+      await _checkForDuplicates(submissions);
+
       setState(() {
-        _submissions = List<Map<String, dynamic>>.from(response);
+        _submissions = submissions;
         _isLoading = false;
       });
     } catch (e) {
@@ -52,6 +58,41 @@ class _PendingSubmissionsState extends State<PendingSubmissions> {
         );
       }
     }
+  }
+
+  Future<void> _checkForDuplicates(
+      List<Map<String, dynamic>> submissions) async {
+    final duplicates = <String, List<Map<String, dynamic>>>{};
+
+    for (final submission in submissions) {
+      final firstName = submission['first_name']?.toString().trim();
+      final lastName = submission['last_name']?.toString().trim();
+      final birthdate = submission['birthdate'];
+
+      if (firstName == null || lastName == null || birthdate == null) {
+        continue;
+      }
+
+      try {
+        // Check for existing students with matching name and birthdate
+        final existingStudents = await _supabase
+            .from('students')
+            .select(
+                'id, first_name, last_name, middle_name, birthdate, contact_number, barangay, batch_id')
+            .ilike('first_name', firstName)
+            .ilike('last_name', lastName)
+            .eq('birthdate', birthdate);
+
+        if (existingStudents.isNotEmpty) {
+          duplicates[submission['id']] =
+              List<Map<String, dynamic>>.from(existingStudents);
+        }
+      } catch (e) {
+        debugPrint('Error checking duplicates for ${submission['id']}: $e');
+      }
+    }
+
+    _potentialDuplicates = duplicates;
   }
 
   List<Map<String, dynamic>> get _filteredSubmissions {
@@ -153,6 +194,181 @@ class _PendingSubmissionsState extends State<PendingSubmissions> {
     }
   }
 
+  Future<void> _reEnrollExistingStudent(
+      String submissionId, Map<String, dynamic> existingStudent) async {
+    try {
+      // Get the active batch
+      final batchResponse = await _supabase
+          .from('batches')
+          .select('id')
+          .eq('is_active', true)
+          .single();
+
+      final activeBatchId = batchResponse['id'];
+
+      // Update the existing student's batch_id to re-enroll them
+      await _supabase
+          .from('students')
+          .update({'batch_id': activeBatchId}).eq('id', existingStudent['id']);
+
+      // Delete the pending submission
+      await _supabase
+          .from('pending_submissions')
+          .delete()
+          .eq('id', submissionId);
+
+      // Reload submissions
+      await _loadSubmissions();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: TulaiSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Student re-enrolled to active batch successfully',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: TulaiColors.success,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error re-enrolling student: $e'),
+            backgroundColor: TulaiColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showReEnrollDialog(
+      String submissionId, List<Map<String, dynamic>> duplicates) async {
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(TulaiBorderRadius.lg),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.person_add, color: TulaiColors.primary),
+            const SizedBox(width: TulaiSpacing.sm),
+            Expanded(
+              child: Text(
+                'Re-enroll Existing Student',
+                style: TulaiTextStyles.heading3,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select which existing student to re-enroll to the active batch:',
+                style: TulaiTextStyles.bodyMedium.copyWith(
+                  color: TulaiColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: TulaiSpacing.md),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 300),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: duplicates.length,
+                  itemBuilder: (context, index) {
+                    final student = duplicates[index];
+                    final fullName = [
+                      student['first_name'],
+                      student['middle_name'],
+                      student['last_name'],
+                    ]
+                        .where((e) => e != null && e.toString().isNotEmpty)
+                        .join(' ');
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: TulaiSpacing.sm),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: TulaiColors.primary.withOpacity(0.1),
+                          child: Icon(
+                            Icons.person,
+                            color: TulaiColors.primary,
+                          ),
+                        ),
+                        title: Text(
+                          fullName,
+                          style: TulaiTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (student['barangay'] != null)
+                              Text(
+                                'Barangay: ${student['barangay']}',
+                                style: TulaiTextStyles.caption,
+                              ),
+                            if (student['contact_number'] != null)
+                              Text(
+                                'Contact: ${student['contact_number']}',
+                                style: TulaiTextStyles.caption,
+                              ),
+                          ],
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _reEnrollExistingStudent(submissionId, student);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: TulaiColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: TulaiSpacing.md,
+                              vertical: TulaiSpacing.sm,
+                            ),
+                          ),
+                          child: const Text('Re-enroll'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TulaiTextStyles.bodyMedium.copyWith(
+                color: TulaiColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLargeScreen = TulaiResponsive.isLargeScreen(context);
@@ -224,6 +440,40 @@ class _PendingSubmissionsState extends State<PendingSubmissions> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (_potentialDuplicates.isNotEmpty) ...[
+                  const SizedBox(width: TulaiSpacing.md),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: TulaiSpacing.sm,
+                      vertical: TulaiSpacing.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: TulaiColors.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(TulaiBorderRadius.sm),
+                      border: Border.all(
+                        color: TulaiColors.error.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: TulaiColors.error,
+                          size: 16,
+                        ),
+                        const SizedBox(width: TulaiSpacing.xs),
+                        Text(
+                          '${_potentialDuplicates.length} potential duplicate(s)',
+                          style: TulaiTextStyles.bodySmall.copyWith(
+                            color: TulaiColors.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -359,22 +609,62 @@ class _PendingSubmissionsState extends State<PendingSubmissions> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: TulaiSpacing.sm,
-                      vertical: TulaiSpacing.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: TulaiColors.warning.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(TulaiBorderRadius.sm),
-                    ),
-                    child: Text(
-                      'PENDING',
-                      style: TulaiTextStyles.caption.copyWith(
-                        color: TulaiColors.warning,
-                        fontWeight: FontWeight.w700,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: TulaiSpacing.sm,
+                          vertical: TulaiSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: TulaiColors.warning.withOpacity(0.1),
+                          borderRadius:
+                              BorderRadius.circular(TulaiBorderRadius.sm),
+                        ),
+                        child: Text(
+                          'PENDING',
+                          style: TulaiTextStyles.caption.copyWith(
+                            color: TulaiColors.warning,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (_potentialDuplicates
+                          .containsKey(submission['id'])) ...[
+                        const SizedBox(height: TulaiSpacing.xs),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: TulaiSpacing.sm,
+                            vertical: TulaiSpacing.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: TulaiColors.error.withOpacity(0.1),
+                            borderRadius:
+                                BorderRadius.circular(TulaiBorderRadius.sm),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: 12,
+                                color: TulaiColors.error,
+                              ),
+                              const SizedBox(width: TulaiSpacing.xs),
+                              Text(
+                                'DUPLICATE',
+                                style: TulaiTextStyles.caption.copyWith(
+                                  color: TulaiColors.error,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -406,9 +696,144 @@ class _PendingSubmissionsState extends State<PendingSubmissions> {
                 ],
               ),
               const SizedBox(height: TulaiSpacing.md),
+              if (_potentialDuplicates.containsKey(submission['id'])) ...[
+                Container(
+                  padding: const EdgeInsets.all(TulaiSpacing.md),
+                  decoration: BoxDecoration(
+                    color: TulaiColors.error.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(TulaiBorderRadius.sm),
+                    border: Border.all(
+                      color: TulaiColors.error.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: TulaiColors.error,
+                            size: 20,
+                          ),
+                          const SizedBox(width: TulaiSpacing.sm),
+                          Text(
+                            'Potential Duplicate Enrollment',
+                            style: TulaiTextStyles.labelMedium.copyWith(
+                              color: TulaiColors.error,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: TulaiSpacing.xs),
+                      Text(
+                        'Found ${_potentialDuplicates[submission['id']]!.length} existing student(s) with the same name and birthdate:',
+                        style: TulaiTextStyles.bodySmall.copyWith(
+                          color: TulaiColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: TulaiSpacing.sm),
+                      ..._potentialDuplicates[submission['id']]!
+                          .map((existing) {
+                        final existingFullName = [
+                          existing['first_name'],
+                          existing['middle_name'],
+                          existing['last_name'],
+                        ]
+                            .where((e) => e != null && e.toString().isNotEmpty)
+                            .join(' ');
+
+                        return Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: TulaiSpacing.xs),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.person,
+                                size: 14,
+                                color: TulaiColors.textSecondary,
+                              ),
+                              const SizedBox(width: TulaiSpacing.xs),
+                              Expanded(
+                                child: Text(
+                                  existingFullName,
+                                  style: TulaiTextStyles.bodySmall.copyWith(
+                                    color: TulaiColors.textPrimary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              if (existing['barangay'] != null) ...[
+                                Text(
+                                  ' • ${existing['barangay']}',
+                                  style: TulaiTextStyles.caption.copyWith(
+                                    color: TulaiColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      const SizedBox(height: TulaiSpacing.xs),
+                      Text(
+                        'Please verify before approving this submission.',
+                        style: TulaiTextStyles.caption.copyWith(
+                          color: TulaiColors.error,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(height: TulaiSpacing.md),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showReEnrollDialog(
+                            submission['id'],
+                            _potentialDuplicates[submission['id']]!,
+                          ),
+                          icon: const Icon(Icons.person_add, size: 18),
+                          label: const Text('Use Existing & Re-enroll'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: TulaiColors.primary,
+                            side: const BorderSide(
+                                color: TulaiColors.primary, width: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: TulaiSpacing.sm,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: TulaiSpacing.md),
+              ],
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (_potentialDuplicates.containsKey(submission['id'])) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showReEnrollDialog(
+                          submission['id'],
+                          _potentialDuplicates[submission['id']]!,
+                        ),
+                        icon: const Icon(Icons.person_add, size: 18),
+                        label: const Text('Use Existing'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: TulaiColors.primary,
+                          side: const BorderSide(color: TulaiColors.primary),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: TulaiSpacing.sm,
+                            vertical: TulaiSpacing.sm,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: TulaiSpacing.sm),
+                  ],
                   TextButton.icon(
                     onPressed: () => _deleteSubmission(submission['id']),
                     icon: Icon(Icons.delete_outline, color: TulaiColors.error),

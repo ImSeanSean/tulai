@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 /// to maintain consistency across the application.
 
 class TulaiColors {
+  // Additional colors for analytics
+  static const Color tertiary = Color(0xffF7B801); // Amber/Yellow
+  static const Color quaternary = Color(0xffA259F7); // Purple
   // Primary colors from your theme
   static const Color primary = Color(0xff0C15A6);
   static const Color secondary = Color(0xff40AD5F);
